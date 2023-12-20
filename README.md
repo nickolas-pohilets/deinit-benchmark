@@ -28,16 +28,18 @@ Plotting results shows pretty much horizontal lines, and attempting to perform r
 ![async deinit vs inline deinit](img/async-tree-vs-values.png)
 
 ```shell
+$ ./regression.py data/async_tree-vs-values-100.txt -p v,1 
+Scheduling:  0.0868072220715604⋅v + -4607.002487188412, R² = 0.0000, Adjusted R² = 0.0000
+Execution :   -31.694233799276898⋅v + 64710.5348863039, R² = 0.0184, Adjusted R² = 0.0184
+Total     : -31.607426577205334⋅v + 60103.532399115524, R² = 0.0193, Adjusted R² = 0.0193
+$ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
+Scheduling:   -5.465219253223839⋅v + -57727.04201368913, R² = 0.0027, Adjusted R² = 0.0027
+Execution :     5.433015934353694⋅v + 581079.9706013381, R² = 0.0000, Adjusted R² = 0.0000
+Total     : -0.03220331886900761⋅v + 523352.92858764896, R² = 0.0000, Adjusted R² = 0.0000
 $ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-= Scheduling:
--6.053116772639871⋅v + -303492.6510272927
-MAE=6827.367755016029, RMSE=9419.868221998015, R²=0.0014007728773580697, Adjusted R²=-0.0006024352011226863
-= Execution:
--40.5546100771584⋅v + 20718864.977466233
-MAE=363521.69753675937, RMSE=534667.0281384186, R²=1.954398927062062e-05, Adjusted R²=-0.0019864348592966152
-= Total:
--46.60772684979646⋅v + 20415372.326438945
-MAE=362854.46217872656, RMSE=532644.8303128253, R²=2.6009809087401692e-05, Adjusted R²=-0.0019799560689284235
+Scheduling: -6.053116772639871⋅v + -303492.6510272927, R² = 0.0014, Adjusted R² = 0.0014
+Execution :  -40.5546100771584⋅v + 20718864.977466233, R² = 0.0000, Adjusted R² = 0.0000
+Total     : -46.60772684979646⋅v + 20415372.326438945, R² = 0.0000, Adjusted R² = 0.0000
 ```
 
 Now we can analyze performance of async deinit dependin only on number of objects.

@@ -48,119 +48,42 @@ names = []
 for arg in args.params.split(','):
     X.append(params[arg][1](v, o))
     names.append(params[arg][0])
-Y1 = data[:, 2:3]
-Y2 = data[:, 3:4]
-Y3 = Y2 - Y1
 X = np.concatenate(X, axis=1)
 Z = np.linalg.inv(np.dot(X.T, X))
-beta1 = np.dot(Z, np.dot(X.T, Y1))
-beta2 = np.dot(Z, np.dot(X.T, Y2))
-beta3 = np.dot(Z, np.dot(X.T, Y3))
-pY1 = np.dot(X, beta1)
-pY2 = np.dot(X, beta2)
-pY3 = np.dot(X, beta3)
 
+class Phase:
+    def __init__(self, name, Y):
+        self.name = name
+        self.Y = Y
+        self.beta = np.dot(Z, np.dot(X.T, Y))
+        self.pY = np.dot(X, self.beta)
+        self.eq = ' + '.join(f"{k}{n}" for k, n in zip(self.beta[:, 0], names))
+        rss = np.sum(np.square(Y - self.pY))
+        mean = np.mean(Y)
+        sst = np.sum(np.square(Y - mean))
+        self.r_square = 1 - (rss/sst)
+        self.r_square_str = f'{self.r_square:.4f}'
 
-def print_metrics(predictions, Y):
+        # Adjusted R²
+        self.adjusted_r_square = 1 - ((rss/sst) * (len(Y) - 1)) / (len(Y) - len(names) - 1)
+        self.adjusted_r_square_str = f'{self.r_square:.4f}'
+        self.columns = [self.name, self.eq, self.r_square_str, self.adjusted_r_square_str]
 
-    # mean absolute error
-    MAE = np.abs(predictions - Y).mean()
-
-    # root mean square error
-    MSE = np.square(predictions - Y).mean() 
-    RMSE = math.sqrt(MSE)
-
-    # R²
-    rss = np.sum(np.square(Y - predictions))
-    mean = np.mean(Y)
-    sst = np.sum(np.square(Y - mean))
-    r_square = 1 - (rss/sst)
-
-    # Adjusted R²
-    adjusted_r_square = 1 - ((rss/sst) * (len(predictions) - 1)) / (len(predictions) - len(names) - 1)
-    
-    print(f"MAE={MAE}, RMSE={RMSE}, R²={r_square}, Adjusted R²={adjusted_r_square}")
-
-
-def print_eq(beta):
-    print(' + '.join(f"{k}{n}" for k, n in zip(beta[:, 0], names)))
-
+YS = data[:, 2:3]
+YT = data[:, 3:4]
+phases = []
 if 'S' in args.phases:
-    print("= Scheduling:")
-    print_eq(beta1)
-    print_metrics(pY1, Y1)
-
+    phases.append(Phase('Scheduling', YS))
 if 'E' in args.phases:
-    print("= Execution:")
-    print_eq(beta3)
-    print_metrics(pY3, Y3)
-
+    phases.append(Phase('Execution', YT - YS))
 if 'T' in args.phases:
-    print("= Total:")
-    print_eq(beta2)
-    print_metrics(pY2, Y2)
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
-def plot_relative_error(Values, Predictions):
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    ax.scatter(v, o, np.minimum(np.maximum(100*(Values - Predictions) / Predictions, -100), +100))
-    ax.set_xlabel('# values')
-    ax.set_ylabel('# objects')
-    ax.set_zlabel('relative error, %')
-
-    def on_move(event):
-        if event.inaxes == ax:
-            ax.view_init(elev=event.ydata * 1000, azim=event.xdata * 1000)
-            plt.draw()
-
-    fig = ax.get_figure()
-    fig.canvas.mpl_connect('motion_notify_event', on_move)
+    phases.append(Phase('Total', YT))
 
 
-def plot_normalized(Values):
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    ax.scatter(v, o, Values / o / v)
-    ax.set_xlabel('# values')
-    ax.set_ylabel('# objects')
-    ax.set_zlabel('ns')
+column_lengths = [0, 0, 0, 0]
+for p in phases:
+    for (i, s) in enumerate(p.columns):
+        column_lengths[i] = max(column_lengths[i], len(s))
 
-    def on_move(event):
-        if event.inaxes == ax:
-            ax.view_init(elev=event.ydata * 1000, azim=event.xdata * 1000)
-            plt.draw()
-
-    fig = ax.get_figure()
-    fig.canvas.mpl_connect('motion_notify_event', on_move)
-
-def plot_normalized_per_object(Values):
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    ax.scatter(v, Values / o)
-    ax.set_xlabel('# objects')
-    ax.set_ylabel('ns')
-
-def plot_normalized_per_value(Values):
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    ax.scatter(v, Values / o / v)
-    ax.set_xlabel('# values')
-    ax.set_ylabel('ns')
-
-# plot_normalized(Y1)
-# plot_normalized_per_object(Y1)
-# plot_normalized_per_value(Y1)
-# Underestimates for small objects (Y1 > pY1)
-# Overestimates for small values (Y1 < pY1)
-
-
-# fig = plt.figure()
-# ax = fig.add_subplot()
-# ax.scatter(o, Y1 / v)
-# ax.set_xlabel('# objects')
-# ax.set_ylabel('ns')
-
-plt.show()
+for p in phases:
+    print(f'{p.name.ljust(column_lengths[0], " ")}: {p.eq.rjust(column_lengths[1], " ")}, R² = {p.r_square_str.rjust(column_lengths[2], " ")}, Adjusted R² = {p.r_square_str.rjust(column_lengths[3], " ")}')
