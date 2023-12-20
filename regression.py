@@ -33,11 +33,11 @@ def normalize(x):
 
 params = {
     '1': ('', lambda v, o: np.ones(v.shape)),
-    'o': ('*o', lambda v, o: o),
-    'o2': ('*o^2', lambda v, o: np.square(o)),
-    'v': ('*v', lambda v, o: v),
-    'vo': ('*v*o', lambda v, o: np.multiply(v, o)),
-    'vo2': ('*v*o^2', lambda v, o: np.multiply(v, np.square(o))),
+    'o': ('⋅o', lambda v, o: o),
+    'o2': ('⋅o²', lambda v, o: np.square(o)),
+    'v': ('⋅v', lambda v, o: v),
+    'vo': ('⋅v⋅o', lambda v, o: np.multiply(v, o)),
+    'vo2': ('⋅v⋅o²', lambda v, o: np.multiply(v, np.square(o))),
 }
 
 data = np.array(data)
@@ -63,20 +63,23 @@ pY3 = np.dot(X, beta3)
 
 def print_metrics(predictions, Y):
 
-    #calculating mean absolute error
+    # mean absolute error
     MAE = np.abs(predictions - Y).mean()
 
-    #calculating root mean square error
+    # root mean square error
     MSE = np.square(predictions - Y).mean() 
     RMSE = math.sqrt(MSE)
 
-    #calculating r_square
+    # R²
     rss = np.sum(np.square(Y - predictions))
     mean = np.mean(Y)
     sst = np.sum(np.square(Y - mean))
     r_square = 1 - (rss/sst)
+
+    # Adjusted R²
+    adjusted_r_square = 1 - ((rss/sst) * (len(predictions) - 1)) / (len(predictions) - len(names) - 1)
     
-    print(f"MAE={MAE}, RMSE={RMSE}, r_square={r_square}")
+    print(f"MAE={MAE}, RMSE={RMSE}, R²={r_square}, Adjusted R²={adjusted_r_square}")
 
 
 def print_eq(beta):
