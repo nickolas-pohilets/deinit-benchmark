@@ -1,6 +1,6 @@
 set -ue
 
-if [ -z "${RELEASE_BUILD_DIR+x}" ]
+if [ -z "${DEVELOPER_DIR+x}" ]
 then
     DEVELOPER_DIR=$(xcode-select -p)
 fi
@@ -10,10 +10,11 @@ then
     RELEASE_BUILD_DIR="$(readlink -f "$(dirname $0)/../build/Ninja-ReleaseAssert/swift-macosx-arm64")"
 fi
 
-xcrun --toolchain default --sdk "$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk" \
+OUTPUT_NAME=./deinit-benchmark.out
+
+SDKROOT=/Applications/Xcode-15.0.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
     $RELEASE_BUILD_DIR/bin/swiftc \
         -target arm64-apple-macosx10.13  \
-        -module-cache-path "$RELEASE_BUILD_DIR/swift-test-results/arm64-apple-macosx10.13/clang-module-cache" \
         -F "$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/Library/Frameworks" \
         -toolchain-stdlib-rpath \
         -Xlinker -rpath -Xlinker "$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/Library/Frameworks" \
@@ -38,6 +39,6 @@ xcrun --toolchain default --sdk "$DEVELOPER_DIR/Platforms/MacOSX.platform/Develo
         deinit-benchmark.swift \
         -Xfrontend -disable-availability-checking \
         -g -Onone \
-        -o deinit-benchmark.out \
+        -o "$OUTPUT_NAME" \
         -module-name main && \
-/usr/bin/env DYLD_LIBRARY_PATH="$RELEASE_BUILD_DIR/lib/swift/macosx" ./deinit-benchmark.out "$@"
+/usr/bin/env DYLD_LIBRARY_PATH="$RELEASE_BUILD_DIR/lib/swift/macosx" "$OUTPUT_NAME" "$@"

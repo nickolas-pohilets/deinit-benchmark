@@ -76,38 +76,45 @@ class TreeBase<Child: Tree> {
 //    }
 //}
 
-final class NonisolatedTree: TreeBase<NonisolatedTree>, Tree {
+typealias NonisolatedTreeBase = TreeBase<NonisolatedTree>
+final class NonisolatedTree: NonisolatedTreeBase, Tree {
 
 }
 
-final class IsolatedCopyTree: TreeBase<IsolatedCopyTree>, Tree {
+typealias IsolatedCopyTreeBase = TreeBase<IsolatedCopyTree>
+final class IsolatedCopyTree: IsolatedCopyTreeBase, Tree {
     @FirstActor deinit {
     }
 }
 
-final class IsolatedResetTree: TreeBase<IsolatedResetTree>, Tree {
+typealias IsolatedResetTreeBase = TreeBase<IsolatedResetTree>
+final class IsolatedResetTree: IsolatedResetTreeBase, Tree {
     @resetTaskLocals
     @FirstActor deinit {
     }
 }
 
-final class InterleavedCopyTree: TreeBase<InterleavedCopyTreeAnother>, Tree {
+typealias InterleavedCopyTreeBase = TreeBase<InterleavedCopyTreeAnother>
+final class InterleavedCopyTree: InterleavedCopyTreeBase, Tree {
     @FirstActor deinit {
     }
 }
 
-final class InterleavedCopyTreeAnother: TreeBase<InterleavedCopyTree>, Tree {
+typealias InterleavedCopyTreeAnotherBase = TreeBase<InterleavedCopyTree>
+final class InterleavedCopyTreeAnother: InterleavedCopyTreeAnotherBase, Tree {
     @SecondActor deinit {
     }
 }
 
-final class InterleavedResetTree: TreeBase<InterleavedResetTreeAnother>, Tree {
+typealias InterleavedResetTreeBase = TreeBase<InterleavedResetTreeAnother>
+final class InterleavedResetTree: InterleavedResetTreeBase, Tree {
     @resetTaskLocals
     @FirstActor deinit {
     }
 }
 
-final class InterleavedResetTreeAnother: TreeBase<InterleavedResetTree>, Tree {
+typealias InterleavedResetTreeAnotherBase = TreeBase<InterleavedResetTree>
+final class InterleavedResetTreeAnother: InterleavedResetTreeAnotherBase, Tree {
     @resetTaskLocals
     @SecondActor deinit {
     }
@@ -135,91 +142,33 @@ final class InterleavedResetTreeAnother: TreeBase<InterleavedResetTree>, Tree {
 //    }
 //}
 
-final class AsyncYieldCopyTree: TreeBase<AsyncYieldCopyTree>, Tree {
+typealias AsyncYieldCopyTreeBase = TreeBase<AsyncYieldCopyTree>
+final class AsyncYieldCopyTree: AsyncYieldCopyTreeBase, Tree {
     @FirstActor deinit async {
         await Task.yield()
     }
 }
 
-final class AsyncYieldResetTree: TreeBase<AsyncYieldResetTree>, Tree {
+typealias AsyncYieldResetTreeBase = TreeBase<AsyncYieldResetTree>
+final class AsyncYieldResetTree: AsyncYieldResetTreeBase, Tree {
     @resetTaskLocals
     @FirstActor deinit async {
         await Task.yield()
     }
 }
 
-final class AsyncNoOpCopyTree: TreeBase<AsyncNoOpCopyTree>, Tree {
+typealias AsyncNoOpCopyTreeBase = TreeBase<AsyncNoOpCopyTree>
+final class AsyncNoOpCopyTree: AsyncNoOpCopyTreeBase, Tree {
     @FirstActor deinit async {
         await noop()
     }
 }
 
-final class AsyncNoOpResetTree: TreeBase<AsyncNoOpResetTree>, Tree {
+typealias AsyncNoOpResetTreeBase = TreeBase<AsyncNoOpResetTree>
+final class AsyncNoOpResetTree: AsyncNoOpResetTreeBase, Tree {
     @resetTaskLocals
     @FirstActor deinit async {
         await noop()
-    }
-}
-
-class InterleavedTree {
-    var group: DispatchGroup
-    var first: InterleavedTreeAnother?
-    var second: InterleavedTreeAnother?
-
-    init(_ objects: Int, _ group: DispatchGroup) {
-        self.group = group
-        group.enter()
-
-        let L = objects / 2
-        let R = objects - 1 - L
-
-        if L == 0 {
-            first = nil
-        } else {
-            first = InterleavedTreeAnother(L, group)
-        }
-
-        if R == 0 {
-            second = nil  
-        } else {
-            second = InterleavedTreeAnother(R, group)
-        }
-    }
-
-    @resetTaskLocals
-    @FirstActor deinit {
-        group.leave()
-    }
-}
-
-class InterleavedTreeAnother {
-    var group: DispatchGroup
-    var first: InterleavedTree?
-    var second: InterleavedTree?
-
-    init(_ objects: Int, _ group: DispatchGroup) {
-        self.group = group
-        group.enter()
-
-        let L = objects / 2
-        let R = objects - 1 - L
-
-        if L == 0 {
-            first = nil
-        } else {
-            first = InterleavedTree(L, group)
-        }
-
-        if R == 0 {
-            second = nil  
-        } else {
-            second = InterleavedTree(R, group)
-        }
-    }
-
-    @resetTaskLocals
-    @FirstActor deinit {
-        group.leave()
     }
 }
 
