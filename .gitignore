@@ -9,3 +9,5 @@ DerivedData/
 .netrc
 deinit-benchmark.out
 deinit-benchmark.out.dSYM
+deinit-benchmark-debug.out
+deinit-benchmark-debug.out.dSYM
