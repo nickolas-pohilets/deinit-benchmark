@@ -36,8 +36,8 @@ $ ./run-benchmark.sh async_array --values=1:200 --objects=5000:5000 --points=100
 
 Plotting results shows pretty much horizontal lines. For easier comparison durations are normalized per number of objects.
 
-![async deinit of a tree vs inline deinit of a tree](img/async-tree-vs-values.png)
-![async deinit of an array vs inline deinit of an array](img/async-array-vs-values.png)
+![async deinit of a tree vs number of task-local values](img/async-tree-vs-values.png)
+![async deinit of an array vs number of task-local values](img/async-array-vs-values.png)
 
 And attempting to perform regression against number of task-local values gives rubbish R².
 
@@ -69,3 +69,25 @@ Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjuste
 ```
 
 Note that scheduling deallocation of the root of a tree is faster then deallocating entire tree, because only 1 objects needs to be scheduled. This shows that async deinit can be used to unblock thread of last release faster at the cost of slower deallocation in another task.
+
+Now we can analyze performance of async deinit depending only on number of objects:
+
+```shell
+$ ./run-benchmark.sh async_tree --values=1:1 --objects=100:50000 --points=1000 > data/async_tree-vs-objects.txt 
+$ ./run-benchmark.sh async_array --values=1:1 --objects=100:50000 --points=1000 > data/async_array-vs-objects.txt
+```
+
+![async deinit vs number of objects](img/async-vs-objects.png)
+
+```shell
+$ ./regression.py data/async_tree-vs-objects.txt  -p o,1
+Scheduling: -62.03628799124445⋅o + 1319.8175314705481, R² = 0.9964, Adjusted R² = 0.9964
+Execution :  502.1604231178307⋅o + -684561.5415930031, R² = 0.9848, Adjusted R² = 0.9848
+Total     : 440.12413512658634⋅o + -683241.7240615345, R² = 0.9805, Adjusted R² = 0.9805
+$ ./regression.py data/async_array-vs-objects.txt  -p o,1
+Scheduling:   341.9412867451418⋅o + -75775.4954550333, R² = 0.8212, Adjusted R² = 0.8212
+Execution :  85.31886018727057⋅o + -94431.03322500603, R² = 0.9329, Adjusted R² = 0.9329
+Total     : 427.26014693241245⋅o + -170206.5286800412, R² = 0.8768, Adjusted R² = 0.8768
+```
+
+This shows that total cost of async deinit is linear in number of objects, costing about 400ns extra per object. The `async_array` benchmark shows that most of the time is spent in scheduling task for async deinit. The `async_tree` is not indicative, because measured scheduling time includes only scheduling destruction of the root object. Scheduling destruction of the child nodes is included in the "Execution".
