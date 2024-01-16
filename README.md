@@ -43,29 +43,29 @@ And attempting to perform regression against number of task-local values gives r
 
 ```shell
 $ ./regression.py data/async_tree-vs-values-100.txt -p v,1 
-Scheduling: 0.14720034717678354⋅v + -4884.234931270247, R² = 0.0000, Adjusted R² = 0.0000
-Execution :  -23.699491793629342⋅v + 54000.76281262156, R² = 0.0209, Adjusted R² = 0.0209
-Total     :  -23.552291446452447⋅v + 49116.52788135131, R² = 0.0224, Adjusted R² = 0.0224
+Scheduling: 0.14720034717678354⋅v + -4884.234931270247, R² = 0.0000, Adjusted R² = -0.0020
+Execution :  -23.699491793629342⋅v + 54000.76281262156, R² = 0.0209, Adjusted R² =  0.0189
+Total     :  -23.552291446452447⋅v + 49116.52788135131, R² = 0.0224, Adjusted R² =  0.0205
 $ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
-Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² = 0.0026
-Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = 0.0002
-Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = 0.0004
+Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² =  0.0006
+Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = -0.0018
+Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = -0.0016
 $ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = 0.0002
-Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = 0.0000
-Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = 0.0000
-$ ./regression.py data/async_array-vs-values-100.txt -p v,1                                                          
-Scheduling: 2.4317184474247444⋅v + 14124.10763059641, R² = 0.0003, Adjusted R² = 0.0003
-Execution : 7.186227269560555⋅v + 30009.201698502035, R² = 0.0027, Adjusted R² = 0.0027
-Total     :  9.617945716985414⋅v + 44133.30932909846, R² = 0.0027, Adjusted R² = 0.0027
+Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = -0.0019
+Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = -0.0020
+Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = -0.0020
+$ ./regression.py data/async_array-vs-values-100.txt -p v,1
+Scheduling: 2.4317184474247444⋅v + 14124.10763059641, R² = 0.0003, Adjusted R² = -0.0017
+Execution : 7.186227269560555⋅v + 30009.201698502035, R² = 0.0027, Adjusted R² =  0.0007
+Total     :  9.617945716985414⋅v + 44133.30932909846, R² = 0.0027, Adjusted R² =  0.0007
 $ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
-Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² = 0.0026
-Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = 0.0002
-Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = 0.0004
+Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² =  0.0006
+Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = -0.0018
+Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = -0.0016
 $ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = 0.0002
-Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = 0.0000
-Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = 0.0000
+Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = -0.0019
+Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = -0.0020
+Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = -0.0020
 ```
 
 Note that scheduling deallocation of the root of a tree is faster then deallocating entire tree, because only 1 objects needs to be scheduled. This shows that async deinit can be used to unblock thread of last release faster at the cost of slower deallocation in another task.
@@ -80,14 +80,14 @@ $ ./run-benchmark.sh async_array --values=1:1 --objects=100:50000 --points=1000 
 ![async deinit vs number of objects](img/async-vs-objects.png)
 
 ```shell
-$ ./regression.py data/async_tree-vs-objects.txt  -p o,1
+$ ./regression.py data/async_tree-vs-objects.txt -p o,1
 Scheduling: -62.03628799124445⋅o + 1319.8175314705481, R² = 0.9964, Adjusted R² = 0.9964
 Execution :  502.1604231178307⋅o + -684561.5415930031, R² = 0.9848, Adjusted R² = 0.9848
-Total     : 440.12413512658634⋅o + -683241.7240615345, R² = 0.9805, Adjusted R² = 0.9805
-$ ./regression.py data/async_array-vs-objects.txt  -p o,1
-Scheduling:   341.9412867451418⋅o + -75775.4954550333, R² = 0.8212, Adjusted R² = 0.8212
-Execution :  85.31886018727057⋅o + -94431.03322500603, R² = 0.9329, Adjusted R² = 0.9329
-Total     : 427.26014693241245⋅o + -170206.5286800412, R² = 0.8768, Adjusted R² = 0.8768
+Total     : 440.12413512658634⋅o + -683241.7240615345, R² = 0.9805, Adjusted R² = 0.9804
+$ ./regression.py data/async_array-vs-objects.txt -p o,1
+Scheduling:   341.9412867451418⋅o + -75775.4954550333, R² = 0.8212, Adjusted R² = 0.8209
+Execution :  85.31886018727057⋅o + -94431.03322500603, R² = 0.9329, Adjusted R² = 0.9328
+Total     : 427.26014693241245⋅o + -170206.5286800412, R² = 0.8768, Adjusted R² = 0.8766
 ```
 
 This shows that total cost of async deinit is linear in number of objects, costing about 400ns extra per object. The `async_array` benchmark shows that most of the time is spent in scheduling task for async deinit. The `async_tree` is not indicative, because measured scheduling time includes only scheduling destruction of the root object. Scheduling destruction of the child nodes is included in the "Execution".

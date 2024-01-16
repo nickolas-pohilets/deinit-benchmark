@@ -66,7 +66,7 @@ class Phase:
 
         # Adjusted R²
         self.adjusted_r_square = 1 - ((rss/sst) * (len(Y) - 1)) / (len(Y) - len(names) - 1)
-        self.adjusted_r_square_str = f'{self.r_square:.4f}'
+        self.adjusted_r_square_str = f'{self.adjusted_r_square:.4f}'
         self.columns = [self.name, self.eq, self.r_square_str, self.adjusted_r_square_str]
 
 YS = data[:, 2:3]
@@ -86,4 +86,4 @@ for p in phases:
         column_lengths[i] = max(column_lengths[i], len(s))
 
 for p in phases:
-    print(f'{p.name.ljust(column_lengths[0], " ")}: {p.eq.rjust(column_lengths[1], " ")}, R² = {p.r_square_str.rjust(column_lengths[2], " ")}, Adjusted R² = {p.r_square_str.rjust(column_lengths[3], " ")}')
+    print(f'{p.name.ljust(column_lengths[0], " ")}: {p.eq.rjust(column_lengths[1], " ")}, R² = {p.r_square_str.rjust(column_lengths[2], " ")}, Adjusted R² = {p.adjusted_r_square_str.rjust(column_lengths[3], " ")}')
