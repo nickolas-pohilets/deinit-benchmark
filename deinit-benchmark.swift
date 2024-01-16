@@ -381,11 +381,11 @@ let benchmarks: [String: Benchmark] = [
     ),
     "async_copy_noop": Benchmark(
         help: "Measure cost of copying task locals in no-op async deinit using binary tree of objects",
-        actor: FirstActor.shared, builder: TreeBuilder.self, testType: AsyncNoOpCopyTree.self, baselineType: AsyncNoOpResetTree.self
+        actor: SecondActor.shared, builder: TreeBuilder.self, testType: AsyncNoOpCopyTree.self, baselineType: AsyncNoOpResetTree.self
     ),
     "async_copy_yield": Benchmark(
         help: "Measure cost of copying task locals in yielding async deinit using binary tree of objects",
-        actor: FirstActor.shared, builder: TreeBuilder.self, testType: AsyncYieldCopyTree.self, baselineType: AsyncYieldResetTree.self
+        actor: SecondActor.shared, builder: TreeBuilder.self, testType: AsyncYieldCopyTree.self, baselineType: AsyncYieldResetTree.self
     ),
     "isolated_no_hop_copy": Benchmark(
         help: "Measure cost of fast path of isolated deinit preserving task locals using binary tree of objects",
