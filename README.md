@@ -15,31 +15,57 @@ Slow path of the isolated deinit with reseting task-local values costs about 130
 
 ### Async dinit
 
-First let's validate that performance of async deinit without copying task-local values does not depend on the number of task-local values
+First let's validate that performance of async deinit without copying task-local values does not depend on the number of task-local values.
+
+Two benchmarks can be used for this:
+* `async_tree` - deallocates a binary tree of given size
+* `async_array` - deallocates a array of objects
+
+We fix range of number objects to a fixed value, and let number of task-local values be selected randomly from a linear distribution.
+Benchmark is repeated for 3 different values of number of objects.
+
 
 ```shell
 $ ./run-benchmark.sh async_tree --values=1:200 --objects=100:100 --points=1000 > data/async_tree-vs-values-100.txt 
 $ ./run-benchmark.sh async_tree --values=1:200 --objects=1000:1000 --points=1000 > data/async_tree-vs-values-1000.txt
 $ ./run-benchmark.sh async_tree --values=1:200 --objects=5000:5000 --points=1000 > data/async_tree-vs-values-5000.txt
+$ ./run-benchmark.sh async_array --values=1:200 --objects=100:100 --points=1000 > data/async_array-vs-values-100.txt 
+$ ./run-benchmark.sh async_array --values=1:200 --objects=1000:1000 --points=1000 > data/async_array-vs-values-1000.txt
+$ ./run-benchmark.sh async_array --values=1:200 --objects=5000:5000 --points=1000 > data/async_array-vs-values-5000.txt
 ```
 
-Plotting results shows pretty much horizontal lines, and attempting to perform regression against number of task-local values gives rubbish R².
+Plotting results shows pretty much horizontal lines. For easier comparison durations are normalized per number of objects.
 
-![async deinit vs inline deinit](img/async-tree-vs-values.png)
+![async deinit of a tree vs inline deinit of a tree](img/async-tree-vs-values.png)
+![async deinit of an array vs inline deinit of an array](img/async-array-vs-values.png)
+
+And attempting to perform regression against number of task-local values gives rubbish R².
 
 ```shell
 $ ./regression.py data/async_tree-vs-values-100.txt -p v,1 
-Scheduling:  0.0868072220715604⋅v + -4607.002487188412, R² = 0.0000, Adjusted R² = 0.0000
-Execution :   -31.694233799276898⋅v + 64710.5348863039, R² = 0.0184, Adjusted R² = 0.0184
-Total     : -31.607426577205334⋅v + 60103.532399115524, R² = 0.0193, Adjusted R² = 0.0193
+Scheduling: 0.14720034717678354⋅v + -4884.234931270247, R² = 0.0000, Adjusted R² = 0.0000
+Execution :  -23.699491793629342⋅v + 54000.76281262156, R² = 0.0209, Adjusted R² = 0.0209
+Total     :  -23.552291446452447⋅v + 49116.52788135131, R² = 0.0224, Adjusted R² = 0.0224
 $ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
-Scheduling:   -5.465219253223839⋅v + -57727.04201368913, R² = 0.0027, Adjusted R² = 0.0027
-Execution :     5.433015934353694⋅v + 581079.9706013381, R² = 0.0000, Adjusted R² = 0.0000
-Total     : -0.03220331886900761⋅v + 523352.92858764896, R² = 0.0000, Adjusted R² = 0.0000
+Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² = 0.0026
+Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = 0.0002
+Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = 0.0004
 $ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-Scheduling: -6.053116772639871⋅v + -303492.6510272927, R² = 0.0014, Adjusted R² = 0.0014
-Execution :  -40.5546100771584⋅v + 20718864.977466233, R² = 0.0000, Adjusted R² = 0.0000
-Total     : -46.60772684979646⋅v + 20415372.326438945, R² = 0.0000, Adjusted R² = 0.0000
+Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = 0.0002
+Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = 0.0000
+Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = 0.0000
+$ ./regression.py data/async_array-vs-values-100.txt -p v,1                                                          
+Scheduling: 2.4317184474247444⋅v + 14124.10763059641, R² = 0.0003, Adjusted R² = 0.0003
+Execution : 7.186227269560555⋅v + 30009.201698502035, R² = 0.0027, Adjusted R² = 0.0027
+Total     :  9.617945716985414⋅v + 44133.30932909846, R² = 0.0027, Adjusted R² = 0.0027
+$ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
+Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² = 0.0026
+Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = 0.0002
+Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = 0.0004
+$ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
+Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = 0.0002
+Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = 0.0000
+Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = 0.0000
 ```
 
-Now we can analyze performance of async deinit dependin only on number of objects.
+Note that scheduling deallocation of the root of a tree is faster then deallocating entire tree, because only 1 objects needs to be scheduled. This shows that async deinit can be used to unblock thread of last release faster at the cost of slower deallocation in another task.
