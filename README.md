@@ -96,23 +96,20 @@ This shows that total cost of async deinit is linear in number of objects, costi
 
 ```shell
 $ ./run-benchmark.sh async_copy_noop --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_noop.txt 
-$ ./run-benchmark.sh async_copy_yield --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_yield.txt 
 ```
+
+![cost of copying task-locals in async deinit](img/async-copy.png)
 
 Difference in scheduling is too noisy to draw any conclusions:
 
 ```shell
 $ ./regression.py data/async_copy_noop.txt -y S        
 Scheduling: -1.7290801314669238e-08⋅v⋅o² + 0.001235787251508909⋅v⋅o + -7.618884224050876⋅v + 5.302224585147051e-06⋅o² + -0.3656720714361409⋅o + 5570.464743812955, R² = 0.1265, Adjusted R² = 0.1212
-$ ./regression.py data/async_copy_yield.txt -y S
-Scheduling: 2.401038257980477e-09⋅v⋅o² + 0.0001400623502357549⋅v⋅o + 2.520773869538109⋅v + 1.5624787431507254e-06⋅o² + -0.19094199153372815⋅o + 4393.351088412697, R² = 0.2152, Adjusted R² = 0.2105
 ```
 
-But differences in total execution time allow to conclude that copying task-locals in async deinit costs about 40ns per value:
+But differences in total execution time allow to conclude that copying task-locals in async deinit costs about 40ns per value per object:
 
 ```shell
 $ ./regression.py data/async_copy_noop.txt -y T -p vo
 Total: 39.14231151032403⋅v⋅o, R² = 0.9981, Adjusted R² = 0.9981
-$ ./regression.py data/async_copy_yield.txt -y T -p vo
-Total: 40.59742341375952⋅v⋅o, R² = 0.9976, Adjusted R² = 0.9976
 ```

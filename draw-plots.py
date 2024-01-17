@@ -2,6 +2,7 @@
 import numpy as np
 import math
 from matplotlib import pyplot as plt
+from scipy.spatial import Delaunay
 
 def read_data(dataset):
     data = []
@@ -87,10 +88,39 @@ def draw_async_vs_objects():
 
 	plt.savefig(f'img/async-vs-objects.png')
 
+def draw_async_copy():
+	data = read_data(f'data/async_copy_noop.txt')
+	tri = Delaunay(data[:, 0:2] / [[200, 50000]])
+
+	fig = plt.figure(figsize=(20,10))
+
+	ax = fig.add_subplot(1, 2, 1)
+	ax.set_title('Scheduling')
+	ax.set_xlabel('# of task-local values')
+	ax.set_ylabel('# of objects')
+	cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 2], levels=21, cmap="tab20b")
+	fig.colorbar(cntr, ax=ax, label='ns')
+	plt.xticks(range(0, 200, 25)) 
+	plt.yticks(range(0, 50000, 6250))
+	plt.grid()
+
+	ax = fig.add_subplot(1, 2, 2)
+	ax.set_title('Total')
+	ax.set_xlabel('# of task-local values')
+	ax.set_ylabel('# of objects')
+	cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 4], levels=21, vmin=0, vmax=4e8, cmap="tab20b")
+	fig.colorbar(cntr, ax=ax, label='ns')
+	plt.xticks(range(0, 200, 25)) 
+	plt.yticks(range(0, 50000, 6250))
+	plt.grid()
+
+	plt.savefig(f'img/async-copy.png')
+
 
 def main():
 	draw_async_vs_values()
 	draw_async_vs_objects()
+	draw_async_copy()
 
 if __name__ == '__main__':
 	main()
