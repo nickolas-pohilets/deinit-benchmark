@@ -40,6 +40,24 @@ def draw_isolated_no_hop_copy():
 
 	plt.savefig(f'img/isolated_no_hop_copy.png')
 
+def draw_isolated_no_hop_reset():
+	fig = plt.figure(figsize=(20,10))
+	for i, kind in enumerate(['array', 'tree']):
+		data = read_data(f'data/isolated_no_hop_reset_{kind}.txt')
+		tri = Delaunay(data[:, 0:2] / [[200, 50000]])
+
+		ax = fig.add_subplot(1, 2, 1 + i)
+		ax.set_title(kind.capitalize())
+		ax.set_xlabel('# of task-local values')
+		ax.set_ylabel('# of objects')
+		cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 2], levels=np.arange(0, 21) * 0.1e6, extend='both', cmap="tab20b")
+		fig.colorbar(cntr, ax=ax, label='ns')
+		plt.xticks(range(0, 200, 25)) 
+		plt.yticks(range(0, 50000, 6250))
+		plt.grid()
+
+	plt.savefig(f'img/isolated_no_hop_reset.png')
+
 def draw_async_vs_values():
 	for kind in ['tree', 'array']:
 		x100 = read_data(f'data/async_{kind}-vs-values-100.txt')
@@ -175,6 +193,7 @@ def draw_async_copy_array():
 
 def main():
 	draw_isolated_no_hop_copy()
+	draw_isolated_no_hop_reset()
 	draw_async_vs_values()
 	draw_async_vs_objects()
 	draw_async_copy_tree()

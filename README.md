@@ -37,6 +37,24 @@ Total: 18.455656955023045⋅o, R² = 0.9307, Adjusted R² = 0.9307
 
 #### 2. Fast path - reset
 
+```shell
+$ ./run-benchmark.sh isolated_no_hop_reset_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_array.txt
+$ ./run-benchmark.sh isolated_no_hop_reset_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_tree.txt
+```
+
+When resetting task-local values, performance of the fast path of the isolated deinit also does not depend on number of task-local values, but costs per object are higher - 36ns for array case and 41ns for tree case. The 5ns difference between cases is reproducible, but its origin is not clear.
+
+Extra work needed to reset task-local values is about 20ns per object.
+
+![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_reset.png)
+
+```shell
+$ ./regression.py data/isolated_no_hop_reset_array.txt -y T -p o
+Total: 35.786485003793004⋅o, R² = 0.9743, Adjusted R² = 0.9742
+$ ./regression.py data/isolated_no_hop_reset_tree.txt -y T -p o
+Total: 41.01587233652484⋅o, R² = 0.9746, Adjusted R² = 0.9746
+```
+
 #### 3. Slow path - copy
 
 #### 4. Fast path - reset
