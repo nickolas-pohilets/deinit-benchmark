@@ -13,7 +13,7 @@ Slow path of the isolated deinit with reseting task-local values costs about 130
 
 ## Experiments
 
-### Async dinit
+### Async deinit
 
 First let's validate that performance of async deinit without copying task-local values does not depend on the number of task-local values.
 
@@ -36,8 +36,8 @@ $ ./run-benchmark.sh async_array --values=1:200 --objects=5000:5000 --points=100
 
 Plotting results shows pretty much horizontal lines. For easier comparison durations are normalized per number of objects.
 
-![async deinit of a tree vs number of task-local values](img/async-tree-vs-values.png)
-![async deinit of an array vs number of task-local values](img/async-array-vs-values.png)
+![async deinit of a tree vs number of task-local values](img/async_tree-vs-values.png)
+![async deinit of an array vs number of task-local values](img/async_array-vs-values.png)
 
 And attempting to perform regression against number of task-local values gives rubbish R².
 
@@ -100,7 +100,7 @@ This shows that total cost of async deinit is linear in number of objects, costi
 $ ./run-benchmark.sh async_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_array.txt 
 ```
 
-![cost of copying task-locals in async deinit of array of objects](img/async-copy-array.png)
+![cost of copying task-locals in async deinit of array of objects](img/async_copy_array.png)
 
 ```shell
 $ ./regression.py data/async_copy_array.txt -p vo,o  
@@ -122,7 +122,7 @@ Surprisingly there seems to be linear dependency between execution time and numb
 $ ./run-benchmark.sh async_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_tree.txt 
 ```
 
-![cost of copying task-locals in async deinit of tree of objects](img/async-copy-tree.png)
+![cost of copying task-locals in async deinit of tree of objects](img/async_copy_tree.png)
 
 Difference in scheduling is too noisy to draw any conclusions about effect of copying task-locals on scheduling of the destruction of the root of the tree:
 

@@ -59,7 +59,7 @@ def draw_async_vs_values():
 
 		plt.tight_layout()
 
-		plt.savefig(f'img/async-{kind}-vs-values.png')
+		plt.savefig(f'img/async_{kind}-vs-values.png')
 
 
 def draw_async_vs_objects():
@@ -114,7 +114,7 @@ def draw_async_copy_tree():
 	plt.yticks(range(0, 50000, 6250))
 	plt.grid()
 
-	plt.savefig(f'img/async-copy-tree.png')
+	plt.savefig(f'img/async_copy_tree.png')
 
 def draw_async_copy_array():
 	array = read_data(f'data/async_copy_array.txt')
@@ -152,7 +152,7 @@ def draw_async_copy_array():
 	plt.yticks(range(0, 50000, 6250))
 	plt.grid()
 
-	plt.savefig(f'img/async-copy-array.png')
+	plt.savefig(f'img/async_copy_array.png')
 
 
 def main():
