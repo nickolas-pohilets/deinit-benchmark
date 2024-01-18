@@ -88,9 +88,9 @@ def draw_async_vs_objects():
 
 	plt.savefig(f'img/async-vs-objects.png')
 
-def draw_async_copy():
-	data = read_data(f'data/async_copy_noop.txt')
-	tri = Delaunay(data[:, 0:2] / [[200, 50000]])
+def draw_async_copy_tree():
+	tree = read_data(f'data/async_copy_tree.txt')
+	tri = Delaunay(tree[:, 0:2] / [[200, 50000]])
 
 	fig = plt.figure(figsize=(20,10))
 
@@ -98,7 +98,7 @@ def draw_async_copy():
 	ax.set_title('Scheduling')
 	ax.set_xlabel('# of task-local values')
 	ax.set_ylabel('# of objects')
-	cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 2], levels=21, cmap="tab20b")
+	cntr = ax.tricontourf(tree[:, 0], tree[:, 1], tri.simplices, tree[:, 2], levels=21, cmap="tab20b")
 	fig.colorbar(cntr, ax=ax, label='ns')
 	plt.xticks(range(0, 200, 25)) 
 	plt.yticks(range(0, 50000, 6250))
@@ -108,19 +108,58 @@ def draw_async_copy():
 	ax.set_title('Total')
 	ax.set_xlabel('# of task-local values')
 	ax.set_ylabel('# of objects')
-	cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 4], levels=21, vmin=0, vmax=4e8, cmap="tab20b")
+	cntr = ax.tricontourf(tree[:, 0], tree[:, 1], tri.simplices, tree[:, 4], levels=21, vmin=0, vmax=4e8, cmap="tab20b")
 	fig.colorbar(cntr, ax=ax, label='ns')
 	plt.xticks(range(0, 200, 25)) 
 	plt.yticks(range(0, 50000, 6250))
 	plt.grid()
 
-	plt.savefig(f'img/async-copy.png')
+	plt.savefig(f'img/async-copy-tree.png')
+
+def draw_async_copy_array():
+	array = read_data(f'data/async_copy_array.txt')
+	tri = Delaunay(array[:, 0:2] / [[200, 50000]])
+
+	fig = plt.figure(figsize=(30,10))
+
+	ax = fig.add_subplot(1, 3, 1)
+	ax.set_title('Scheduling')
+	ax.set_xlabel('# of task-local values')
+	ax.set_ylabel('# of objects')
+	cntr = ax.tricontourf(array[:, 0], array[:, 1], tri.simplices, array[:, 2], levels=21, cmap="tab20b")
+	fig.colorbar(cntr, ax=ax, label='ns')
+	plt.xticks(range(0, 200, 25)) 
+	plt.yticks(range(0, 50000, 6250))
+	plt.grid()
+
+	ax = fig.add_subplot(1, 3, 2)
+	ax.set_title('Execution')
+	ax.set_xlabel('# of task-local values')
+	ax.set_ylabel('# of objects')
+	cntr = ax.tricontourf(array[:, 0], array[:, 1], tri.simplices, array[:, 3], levels=21, cmap="tab20b")
+	fig.colorbar(cntr, ax=ax, label='ns')
+	plt.xticks(range(0, 200, 25)) 
+	plt.yticks(range(0, 50000, 6250))
+	plt.grid()
+
+	ax = fig.add_subplot(1, 3, 3)
+	ax.set_title('Total')
+	ax.set_xlabel('# of task-local values')
+	ax.set_ylabel('# of objects')
+	cntr = ax.tricontourf(array[:, 0], array[:, 1], tri.simplices, array[:, 4], levels=21, vmin=0, vmax=4e8, cmap="tab20b")
+	fig.colorbar(cntr, ax=ax, label='ns')
+	plt.xticks(range(0, 200, 25)) 
+	plt.yticks(range(0, 50000, 6250))
+	plt.grid()
+
+	plt.savefig(f'img/async-copy-array.png')
 
 
 def main():
 	draw_async_vs_values()
 	draw_async_vs_objects()
-	draw_async_copy()
+	draw_async_copy_tree()
+	draw_async_copy_array()
 
 if __name__ == '__main__':
 	main()

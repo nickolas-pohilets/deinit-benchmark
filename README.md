@@ -94,22 +94,48 @@ This shows that total cost of async deinit is linear in number of objects, costi
 
 ### Copying task-local values in async dinit
 
+#### Array
+
 ```shell
-$ ./run-benchmark.sh async_copy_noop --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_noop.txt 
+$ ./run-benchmark.sh async_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_array.txt 
 ```
 
-![cost of copying task-locals in async deinit](img/async-copy.png)
-
-Difference in scheduling is too noisy to draw any conclusions:
+![cost of copying task-locals in async deinit of array of objects](img/async-copy-array.png)
 
 ```shell
-$ ./regression.py data/async_copy_noop.txt -y S        
+$ ./regression.py data/async_copy_array.txt -p vo,o  
+Scheduling:   24.984413687185803⋅v⋅o + 169.55852433924048⋅o, R² = 0.9952, Adjusted R² = 0.9952
+Execution : 0.003699444311821941⋅v⋅o + -80.34199529218753⋅o, R² = 0.9667, Adjusted R² = 0.9666
+Total     :    24.988113131497613⋅v⋅o + 89.21652904705317⋅o, R² = 0.9951, Adjusted R² = 0.9951
+./regression.py data/async_copy_array.txt -y S,T -p vo                                                                                
+Scheduling: 26.264204261611525⋅v⋅o, R² = 0.9933, Adjusted R² = 0.9933
+Total     : 25.661499936450927⋅v⋅o, R² = 0.9946, Adjusted R² = 0.9946
+```
+
+When scheduling async deinit, it costs about 25ns to copy a task-local value. Data is too noisy to determine if there is a per-object cost independent of number of task-local values.
+
+Surprisingly there seems to be linear dependency between execution time and number of objects. Each extra object **decreases** execution time by 80ns. That's a very surprising effect, for which I don't have an explanation yet.
+
+#### Tree
+
+```shell
+$ ./run-benchmark.sh async_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_tree.txt 
+```
+
+![cost of copying task-locals in async deinit of tree of objects](img/async-copy-tree.png)
+
+Difference in scheduling is too noisy to draw any conclusions about effect of copying task-locals on scheduling of the destruction of the root of the tree:
+
+```shell
+$ ./regression.py data/async_copy_tree.txt -y S        
 Scheduling: -1.7290801314669238e-08⋅v⋅o² + 0.001235787251508909⋅v⋅o + -7.618884224050876⋅v + 5.302224585147051e-06⋅o² + -0.3656720714361409⋅o + 5570.464743812955, R² = 0.1265, Adjusted R² = 0.1212
 ```
 
 But differences in total execution time allow to conclude that copying task-locals in async deinit costs about 40ns per value per object:
 
 ```shell
-$ ./regression.py data/async_copy_noop.txt -y T -p vo
+$ ./regression.py data/async_copy_tree.txt -y T -p vo
 Total: 39.14231151032403⋅v⋅o, R² = 0.9981, Adjusted R² = 0.9981
 ```
+
+It is not clear what causes 15ns difference between array and tree cases.

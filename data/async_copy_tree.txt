@@ -1,4 +1,4 @@
-# async_copy_noop --values=1:200:linear --objects=100:50000:linear --points=1000
+# async_copy_tree --values=1:200:linear --objects=100:50000:linear --points=1000
 #
 # values objects Δschedule(ns) Δtotal(ns)
 95	41276	21166	160391166
