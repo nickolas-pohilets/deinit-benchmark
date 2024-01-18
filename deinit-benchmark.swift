@@ -387,13 +387,21 @@ let benchmarks: [String: Benchmark] = [
         help: "Measure cost of copying task locals in no-op async deinit using array of objects",
         actor: SecondActor.shared, builder: ArrayBuilder.self, testType: AsyncNoOpCopyTree.self, baselineType: AsyncNoOpResetTree.self
     ),
-    "isolated_no_hop_copy": Benchmark(
+    "isolated_no_hop_copy_tree": Benchmark(
         help: "Measure cost of fast path of isolated deinit preserving task locals using binary tree of objects",
         actor: FirstActor.shared, builder: TreeBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
     ),
-    "isolated_no_hop_reset": Benchmark(
+    "isolated_no_hop_copy_array": Benchmark(
+        help: "Measure cost of fast path of isolated deinit preserving task locals using array of objects",
+        actor: FirstActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
+    ),
+    "isolated_no_hop_reset_tree": Benchmark(
         help: "Measure cost of fast path of isolated deinit inserting stop node using binary tree of objects",
         actor: FirstActor.shared, builder: TreeBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
+    ),
+    "isolated_no_hop_reset_array": Benchmark(
+        help: "Measure cost of fast path of isolated deinit inserting stop node using array of objects",
+        actor: FirstActor.shared, builder: ArrayBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
     ),
     "isolated_hop_copy": Benchmark(
         help: "Measure cost of slow path of isolated deinit copying task locals",

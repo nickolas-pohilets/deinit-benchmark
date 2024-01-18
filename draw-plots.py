@@ -22,6 +22,46 @@ def read_data(dataset):
     return data
 
 
+def draw_isolated_no_hop_copy():
+	for kind in ['tree', 'array']:
+		data = read_data(f'data/isolated_no_hop_copy_{kind}.txt')
+		tri = Delaunay(data[:, 0:2] / [[200, 50000]])
+
+		fig = plt.figure(figsize=(30,10))
+		fig.suptitle(kind.capitalize())
+
+		ax = fig.add_subplot(1, 3, 1)
+		ax.set_title('Scheduling')
+		ax.set_xlabel('# of task-local values')
+		ax.set_ylabel('# of objects')
+		cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 2], levels=21, vmin=0, vmax=1.2e6, cmap="tab20b")
+		fig.colorbar(cntr, ax=ax, label='ns')
+		plt.xticks(range(0, 200, 25)) 
+		plt.yticks(range(0, 50000, 6250))
+		plt.grid()
+
+		ax = fig.add_subplot(1, 3, 2)
+		ax.set_title('Execution')
+		ax.set_xlabel('# of task-local values')
+		ax.set_ylabel('# of objects')
+		cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 3], levels=21, cmap="tab20b")
+		fig.colorbar(cntr, ax=ax, label='ns')
+		plt.xticks(range(0, 200, 25)) 
+		plt.yticks(range(0, 50000, 6250))
+		plt.grid()
+
+		ax = fig.add_subplot(1, 3, 3)
+		ax.set_title('Total')
+		ax.set_xlabel('# of task-local values')
+		ax.set_ylabel('# of objects')
+		cntr = ax.tricontourf(data[:, 0], data[:, 1], tri.simplices, data[:, 4], levels=21, vmin=0, vmax=1.2e6, cmap="tab20b")
+		fig.colorbar(cntr, ax=ax, label='ns')
+		plt.xticks(range(0, 200, 25)) 
+		plt.yticks(range(0, 50000, 6250))
+		plt.grid()
+
+		plt.savefig(f'img/isolated_no_hop_copy_{kind}.png')
+
 def draw_async_vs_values():
 	for kind in ['tree', 'array']:
 		x100 = read_data(f'data/async_{kind}-vs-values-100.txt')
@@ -156,6 +196,7 @@ def draw_async_copy_array():
 
 
 def main():
+	draw_isolated_no_hop_copy()
 	draw_async_vs_values()
 	draw_async_vs_objects()
 	draw_async_copy_tree()

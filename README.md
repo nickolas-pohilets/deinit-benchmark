@@ -8,10 +8,43 @@ After replacing std::set<> with llvm::DesnseSet<> in TaskLocal::copyTo(), the co
 
 Fast path of the isolated deinit has additional cost of about 20ns per object when (not) copying task-local values, and 30-35ns when (not) resetting task-local values. Benchmark deallocates large tree of objects isolated on the same actor. Only the root objects hops (slow path), the rest are released already on the correct actor (fast path). In copying scenario fast path does not touch task-locals at all, so it is faster. In the resetting scenario fast path does not insert a barrier node because task-locals are already empty after the hop, but checking if task-locals are empty apparently costs additional 10-15ns.
 
-Slow path of the isolated deinit with reseting task-local values costs about 130ns
+Slow path of the isolated deinit with resetting task-local values costs about 130ns
 
 
 ## Experiments
+
+### Isolated deinit
+
+#### 1. Fast path - copy
+
+```shell
+$ ./run-benchmark.sh isolated_no_hop_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_copy_array.txt
+$ ./run-benchmark.sh isolated_no_hop_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_copy_tree.txt
+```
+
+When copying (not resetting) task-local values, performance of the fast path of the isolated deinit does not depend on number of task-local values,
+and costs about 16ns per object for array case and 18ns per object for tree case.
+The 2ns difference is reproducible, but its origin is not clear.
+
+![fast path of isolated deinit preserving task-local values for array of objects](img/isolated_no_hop_copy_array.png)
+![fast path of isolated deinit preserving task-local values for tree of objects](img/isolated_no_hop_copy_tree.png)
+
+```shell
+$ ./regression.py data/isolated_no_hop_copy_tree.txt -p o
+Scheduling:    18.452606570963944⋅o, R² = 0.9315, Adjusted R² = 0.9314
+Execution : 0.0030503840591011057⋅o, R² = 0.0037, Adjusted R² = 0.0027
+Total     :    18.455656955023045⋅o, R² = 0.9307, Adjusted R² = 0.9307
+$ ./regression.py data/isolated_no_hop_copy_array.txt -p o
+Scheduling:    15.595341891640176⋅o, R² = 0.9075, Adjusted R² = 0.9074
+Execution : 0.0019973929941581444⋅o, R² = 0.0014, Adjusted R² = 0.0004
+Total     :    15.597339284634334⋅o, R² = 0.9066, Adjusted R² = 0.9065
+```
+
+#### 2. Fast path - reset
+
+#### 3. Slow path - copy
+
+#### 4. Fast path - reset
 
 ### Async deinit
 
