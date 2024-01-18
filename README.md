@@ -26,18 +26,13 @@ When copying (not resetting) task-local values, performance of the fast path of 
 and costs about 16ns per object for array case and 18ns per object for tree case.
 The 2ns difference is reproducible, but its origin is not clear.
 
-![fast path of isolated deinit preserving task-local values for array of objects](img/isolated_no_hop_copy_array.png)
-![fast path of isolated deinit preserving task-local values for tree of objects](img/isolated_no_hop_copy_tree.png)
+![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_copy.png)
 
 ```shell
-$ ./regression.py data/isolated_no_hop_copy_tree.txt -p o
-Scheduling:    18.452606570963944⋅o, R² = 0.9315, Adjusted R² = 0.9314
-Execution : 0.0030503840591011057⋅o, R² = 0.0037, Adjusted R² = 0.0027
-Total     :    18.455656955023045⋅o, R² = 0.9307, Adjusted R² = 0.9307
-$ ./regression.py data/isolated_no_hop_copy_array.txt -p o
-Scheduling:    15.595341891640176⋅o, R² = 0.9075, Adjusted R² = 0.9074
-Execution : 0.0019973929941581444⋅o, R² = 0.0014, Adjusted R² = 0.0004
-Total     :    15.597339284634334⋅o, R² = 0.9066, Adjusted R² = 0.9065
+$ ./regression.py data/isolated_no_hop_copy_array.txt -y T -p o
+Total: 15.597339284634334⋅o, R² = 0.9066, Adjusted R² = 0.9065
+$ ./regression.py data/isolated_no_hop_copy_tree.txt -y T -p o
+Total: 18.455656955023045⋅o, R² = 0.9307, Adjusted R² = 0.9307
 ```
 
 #### 2. Fast path - reset
