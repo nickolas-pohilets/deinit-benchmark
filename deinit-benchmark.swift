@@ -120,28 +120,6 @@ final class InterleavedResetTreeAnother: InterleavedResetTreeAnotherBase, Tree {
     }
 }
 
-//final class InterleavedCopyList: ListBase<InterleavedCopyListAnother>, Tree {
-//    @FirstActor deinit {
-//    }
-//}
-//
-//final class InterleavedCopyListAnother: ListBase<InterleavedCopyList>, Tree {
-//    @SecondActor deinit {
-//    }
-//}
-
-//final class InterleavedResetList: ListBase<InterleavedResetListAnother>, Tree {
-//    @resetTaskLocals
-//    @FirstActor deinit {
-//    }
-//}
-//
-//final class InterleavedResetListAnother: ListBase<InterleavedResetList>, Tree {
-//    @resetTaskLocals
-//    @SecondActor deinit {
-//    }
-//}
-
 typealias AsyncYieldCopyTreeBase = TreeBase<AsyncYieldCopyTree>
 final class AsyncYieldCopyTree: AsyncYieldCopyTreeBase, Tree {
     @FirstActor deinit async {
@@ -206,7 +184,8 @@ struct ArrayBuilder: Builder {
     static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup) -> [AnyObject] { (0..<numObjects).map { _ in type.init(1, g) } }
 }
 
-func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int) -> (schedule: Duration, total: Duration) {
+typealias Measurements = (schedule: Duration, total: Duration)
+func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int) -> Measurements {
     let g = DispatchGroup()
     var storage = builder.build(type, numObjects, g)
     let clock = ContinuousClock()
@@ -218,7 +197,7 @@ func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int) ->
     let t3 = clock.now
     let s = t2 - t1
     let t = t3 - t1
-    return (s, t)
+    return Measurements(schedule: s, total: t)
 }
 
 
@@ -341,8 +320,15 @@ func benchmark(
         let numObjects = objectsGenerator.generate()
         
         withTLs(numTLs) {
-            let test = measure(builder: builder, type: testType, numObjects: numObjects)
-            let baseline = measure(builder: builder, type: baselineType, numObjects: numObjects)
+            let test: Measurements
+            let baseline: Measurements
+            if Bool.random() {
+                test = measure(builder: builder, type: testType, numObjects: numObjects)
+                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects)
+            } else {
+                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects)
+                test = measure(builder: builder, type: testType, numObjects: numObjects)
+            }
             let deltaSchedule = test.schedule - baseline.schedule
             let deltaTotal = test.total - baseline.total
             print(
@@ -403,24 +389,31 @@ let benchmarks: [String: Benchmark] = [
         help: "Measure cost of fast path of isolated deinit inserting stop node using array of objects",
         actor: FirstActor.shared, builder: ArrayBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
     ),
-    "isolated_hop_copy": Benchmark(
-        help: "Measure cost of slow path of isolated deinit copying task locals",
+    "isolated_hop_copy_array": Benchmark(
+        help: "Measure cost of slow path of isolated deinit copying task locals using array of objects",
         actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
     ),
-    "isolated_hop_reset": Benchmark(
-        help: "Measure cost of slow path of isolated deinit ignoring task locals",
+    "isolated_hop_reset_array": Benchmark(
+        help: "Measure cost of slow path of isolated deinit ignoring task locals using array of objects",
         actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
     ),
-    "isolated_copy": Benchmark(
-        help: "Measure cost of copying task locals ",
+    "isolated_copy_array": Benchmark(
+        help: "Measure cost of copying task locals in slow path of isolated deinit using array of objects",
         actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: IsolatedResetTree.self
     ),
+    "isolated_hop_copy_tree": Benchmark(
+        help: "Measure cost of slow path of isolated deinit copying task locals using tree of objects",
+        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedCopyTree.self, baselineType: NonisolatedTree.self
+    ),
+    "isolated_hop_reset_tree": Benchmark(
+        help: "Measure cost of slow path of isolated deinit ignoring task locals using tree of objects",
+        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedResetTree.self, baselineType: NonisolatedTree.self
+    ),
+    "isolated_copy_tree": Benchmark(
+        help: "Measure cost of copying task locals in slow path of isolated deinit using tree of objects",
+        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedCopyTree.self, baselineType: InterleavedResetTree.self
+    ),
 ]
-
-//benchmark_1(ArrayBuilder.self, IsolatedResetTree.self, NonisolatedTree.self, normalizeByTLs: false)
-//benchmark_2(ArrayBuilder.self, IsolatedCopyTree.self, IsolatedResetTree.self, TLs: 1...50, objects: 1_000...1_000)
-
-//measureTreeAgainstValuesCount(IsolatedCopyTree.self, NonisolatedTree.self)
 
 extension String {
     func removingPrefix(_ prefix: String) -> String? {
