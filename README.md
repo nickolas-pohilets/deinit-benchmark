@@ -8,7 +8,7 @@ After replacing std::set<> with llvm::DesnseSet<> in TaskLocal::copyTo(), the co
 
 Fast path of the isolated deinit has additional cost of about 20ns per object when (not) copying task-local values, and 30-35ns when (not) resetting task-local values. Benchmark deallocates large tree of objects isolated on the same actor. Only the root objects hops (slow path), the rest are released already on the correct actor (fast path). In copying scenario fast path does not touch task-locals at all, so it is faster. In the resetting scenario fast path does not insert a barrier node because task-locals are already empty after the hop, but checking if task-locals are empty apparently costs additional 10-15ns.
 
-Slow path of the isolated deinit with resetting task-local values costs about 130ns
+Slow path of the isolated deinit with resetting task-local values costs about 140ns
 
 
 ## Experiments
@@ -55,9 +55,30 @@ $ ./regression.py data/isolated_no_hop_reset_tree.txt -y T -p o
 Total: 41.01587233652484⋅o, R² = 0.9746, Adjusted R² = 0.9746
 ```
 
-#### 3. Slow path - copy
+#### 3. Slow path - reset
 
-#### 4. Fast path - reset
+```shell
+$ ./run-benchmark.sh isolated_hop_reset_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_array.txt
+$ ./run-benchmark.sh isolated_hop_reset_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_tree.txt
+```
+
+Slow path of the isolated deinit without copying task-local values costs about 140±15ns. These benchmarks are quite noisy, and different runs give slightly different values. 
+
+![slow path of isolated deinit without copying task-local values using array of objects](img/isolated_hop_reset_array.png)
+![slow path of isolated deinit without copying task-local values using tree of objects](img/isolated_hop_reset_tree.png)
+
+```shell
+$ ./regression.py data/isolated_hop_reset_array.txt -p o
+Scheduling:   62.5140761844284⋅o, R² = 0.3945, Adjusted R² = 0.3939
+Execution :  66.82597716990809⋅o, R² = 0.9581, Adjusted R² = 0.9581
+Total     : 129.34005335433648⋅o, R² = 0.6737, Adjusted R² = 0.6734
+$ ./regression.py data/isolated_hop_reset_tree.txt -p o
+Scheduling: -62.33280375475336⋅o, R² = 0.9956, Adjusted R² = 0.9956
+Execution : 204.27288984611926⋅o, R² = 0.6524, Adjusted R² = 0.6520
+Total     : 141.94008609136588⋅o, R² = 0.4787, Adjusted R² = 0.4781
+```
+
+#### 4. Slow path - copy
 
 ### Async deinit
 
@@ -138,7 +159,7 @@ Total     : 427.26014693241245⋅o + -170206.5286800412, R² = 0.8768, Adjusted 
 
 This shows that total cost of async deinit is linear in number of objects, costing about 400ns extra per object. The `async_array` benchmark shows that most of the time is spent in scheduling task for async deinit. The `async_tree` is not indicative, because measured scheduling time includes only scheduling destruction of the root object. Scheduling destruction of the child nodes is included in the "Execution".
 
-### Copying task-local values in async dinit
+### Copying task-local values in async deinit
 
 #### Array
 
