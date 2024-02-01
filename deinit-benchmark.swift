@@ -27,7 +27,7 @@ func withTLs<T>(_ count: Int, _ block: () -> T) -> T {
 func noop() async {}
 
 protocol Tree: AnyObject {
-    init(_ objects: Int, _ group: DispatchGroup)
+    init(_ objects: Int, _ group: DispatchGroup, _ ballast: Int)
 }
 
 class TreeBase<Child: Tree> {
@@ -35,24 +35,29 @@ class TreeBase<Child: Tree> {
     var group: DispatchGroup
     var first: ChildType?
     var second: ChildType?
+    let ballast: Int
 
-    init(_ objects: Int, _ group: DispatchGroup) {
+    init(_ objects: Int, _ group: DispatchGroup, _ ballast: Int) {
         self.group = group
-        group.enter()
         
         let L = objects / 2
         let R = objects - 1 - L
 
         if L > 0 {
-            first = ChildType(L, group)
+            first = ChildType(L, group, ballast)
         }
 
         if R > 0 {
-            second = ChildType(R, group)
+            second = ChildType(R, group, ballast)
         }
+
+        self.ballast = ballast
     }
 
     deinit {
+        for _ in 0..<ballast {
+            _ = arc4random()
+        }
         group.leave()
     }
 }
@@ -152,23 +157,27 @@ protocol Builder {
     associatedtype Storage
 
     static var empty: Storage { get }
-    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup) -> Storage
+    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup, _ ballast: Int) -> Storage
 }
 
 struct TreeBuilder: Builder {
     static var empty: AnyObject? { nil }
-    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup) -> AnyObject? { type.init(numObjects, g) }
+    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup, _ ballast: Int) -> AnyObject? {
+        type.init(numObjects, g, ballast)
+    }
 }
 
 struct ArrayBuilder: Builder {
     static var empty: [AnyObject] { [] }
-    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup) -> [AnyObject] { (0..<numObjects).map { _ in type.init(1, g) } }
+    static func build(_ type: any Tree.Type, _ numObjects: Int, _ g: DispatchGroup, _ ballast: Int) -> [AnyObject] {
+        (0..<numObjects).map { _ in type.init(1, g, ballast) }
+    }
 }
 
 typealias Measurements = (schedule: Duration, total: Duration)
-func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int) -> Measurements {
+func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int, ballast: Int) -> Measurements {
     let g = DispatchGroup()
-    var storage = builder.build(type, numObjects, g)
+    var storage = builder.build(type, numObjects, g, ballast)
     let clock = ContinuousClock()
     let t1 = clock.now
     withExtendedLifetime(storage) {}
@@ -236,11 +245,12 @@ func benchmark(
     _ baselineType: any Tree.Type,
     _ TLs: Domain,
     _ objects: Domain,
+    _ ballast: Int,
     _ points: Int
 ) {
     withTLs(1) {
-        _ = measure(builder: builder, type: testType, numObjects: 1)
-        _ = measure(builder: builder, type: baselineType, numObjects: 1)
+        _ = measure(builder: builder, type: testType, numObjects: 1, ballast: 1)
+        _ = measure(builder: builder, type: baselineType, numObjects: 1, ballast: 1)
     }
 
     let valuesGenerator = Generator(TLs)
@@ -254,11 +264,11 @@ func benchmark(
             let test: Measurements
             let baseline: Measurements
             if Bool.random() {
-                test = measure(builder: builder, type: testType, numObjects: numObjects)
-                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects)
+                test = measure(builder: builder, type: testType, numObjects: numObjects, ballast: ballast)
+                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects, ballast: ballast)
             } else {
-                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects)
-                test = measure(builder: builder, type: testType, numObjects: numObjects)
+                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects, ballast: ballast)
+                test = measure(builder: builder, type: testType, numObjects: numObjects, ballast: ballast)
             }
             let deltaSchedule = test.schedule - baseline.schedule
             let deltaTotal = test.total - baseline.total
@@ -282,8 +292,8 @@ struct Benchmark {
     var testType: any Tree.Type
     var baselineType: any Tree.Type
 
-    func run(TLs: Domain, objects: Domain, points: Int) async {
-        await benchmark(actor, builder, testType, baselineType, TLs, objects, points)
+    func run(TLs: Domain, objects: Domain, ballast: Int, points: Int) async {
+        await benchmark(actor, builder, testType, baselineType, TLs, objects, ballast, points)
     }
 }
 
@@ -398,18 +408,19 @@ struct Args: CustomStringConvertible {
     var benchmark: Benchmark
     var values = Domain(range: 1...1_000, distribution: .linear)
     var objects = Domain(range: 10...100_000, distribution: .linear)
+    var ballast: Int = 0
     var points: Int = 5_000
 
     var description: String {
-        "\(benchmarkName) --values=\(values) --objects=\(objects) --points=\(points)"
+        "\(benchmarkName) --values=\(values) --objects=\(objects) --ballast=\(ballast) --points=\(points)"
     }
 
     @MainActor
     func run() async {
         print("# \(self)")
         print("#")
-        print("# values objects Δschedule(ns) Δtotal(ns)")
-        await benchmark.run(TLs: values, objects: objects, points: points)      
+        print("# values objects Δschedule(ns) Δtotal(ns) base-schedule(ns) base-total(ns) test-schedule(ns) test-total(ns)")
+        await benchmark.run(TLs: values, objects: objects, ballast: ballast, points: points)
     }
 }
 
@@ -442,6 +453,13 @@ func parseArgs(_ arguments: [String]) -> Args {
                 print("Invalid number of points")
                 printUsage()
             }
+        } else if let value = arg.removingPrefix("--ballast=") {
+            if let n = Int(value), n >= 0 {
+                result.ballast = n
+            } else {
+                print("Invalid ballast")
+                printUsage()
+            }
         } else {
             print("Unknown argument \"\(arg)\"")
             printUsage()
@@ -451,7 +469,7 @@ func parseArgs(_ arguments: [String]) -> Args {
 }
 
 func printUsage() -> Never {
-    print("Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--points=POINTS]")
+    print("Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--ballast=N] [--points=POINTS]")
     print("Possible benchmark names:")
     for b in benchmarks.keys.sorted() {
         print("  * \(b) - \(benchmarks[b]!.help)")
