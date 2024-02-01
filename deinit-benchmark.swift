@@ -57,25 +57,6 @@ class TreeBase<Child: Tree> {
     }
 }
 
-//class ListBase<Child: Tree> {
-//    typealias ChildType = Child
-//    var group: DispatchGroup
-//    var next: ChildType?
-//
-//    init(_ objects: Int, _ group: DispatchGroup) {
-//        self.group = group
-//        group.enter()
-//        
-//        if objects > 1 {
-//            next = ChildType(objects - 1, group)
-//        }
-//    }
-//
-//    deinit {
-//        group.leave()
-//    }
-//}
-
 typealias NonisolatedTreeBase = TreeBase<NonisolatedTree>
 final class NonisolatedTree: NonisolatedTreeBase, Tree {
 
@@ -198,56 +179,6 @@ func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int) ->
     let s = t2 - t1
     let t = t3 - t1
     return Measurements(schedule: s, total: t)
-}
-
-
-struct Stats {
-    var average: Duration
-    var stddev: Duration
-}
-
-struct StatsCalculator {
-    var sum: Duration = Duration.seconds(0)
-    var values: [Duration] = []
-
-    mutating func add(_ x: Duration) {
-        sum += x
-        values.append(x)
-    }
-
-    var stats: Stats {
-        let average = sum / values.count
-        var variance: Double = 0
-        for value in values {
-            let delta = Double((value - average).asSeconds)
-            variance += delta * delta
-        }
-        let sigma = variance.squareRoot()
-        
-        let integralPart = sigma.rounded(.towardZero)
-        let fractionalPart = sigma - integralPart
-        let stddev = Duration(secondsComponent: Int64(integralPart), attosecondsComponent: Int64((fractionalPart * 1e18).rounded()))
-        return Stats(average: average, stddev: stddev)
-    }
-}
-
-func measureAverage(builder: any Builder.Type, type: any Tree.Type, numObjects: Int, repetitions: Int) -> (schedule: Stats, total: Stats) {
-    var scheduleCalc = StatsCalculator()
-    var totalCalc = StatsCalculator()
-
-    for _ in 0..<repetitions {
-        let (s, t) = measure(builder: builder, type: type, numObjects: numObjects)
-        scheduleCalc.add(s)
-        totalCalc.add(t)
-    }
-    return (scheduleCalc.stats, totalCalc.stats)
-}
-
-func printHeader(normalizeByTLs: Bool, normalizeByObjects: Bool) {
-    let normalizedTitle = normalizeByTLs ? (normalizeByObjects ? "normalized (ns)" : "per TL (ns)") : (normalizeByObjects ? "per object (ns)" : "")
-    let sigmaTitle = "σ " + normalizedTitle
-    print("#TL", "#Objs", "test", "", "", "", "baseline", "", "", "", "delta (us)", "", normalizedTitle, "", separator: "\t")
-    print("", "", "schedule (us)", sigmaTitle, "total (us)", sigmaTitle, "schedule (us)", sigmaTitle, "total (us)", sigmaTitle, "schedule", "total", "schedule", "total", separator: "\t")
 }
 
 enum Distribution: CustomStringConvertible {
