@@ -10,8 +10,68 @@ Fast path of the isolated deinit has additional cost of about 20ns per object wh
 
 Slow path of the isolated deinit with resetting task-local values costs about 140ns
 
-
 ## Experiments
+
+### Setup
+
+```shell
+$ ./run-benchmark.sh --help
+Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--points=POINTS]
+```
+
+Benchmark driver generates specified number of data points, by choosing random number of task-local values and objects within specified ranges.
+Ranges are interpreted as closed intervals. It is possible to specify `MIN`=`MAX` to pin parameter to a specific value.
+
+To isolate incremental cost of new features, each benchmark measures a difference in time between test case and baseline case, e.g. destroying a tree of objects with isolated deinit vs destroying a tree of objects with regular deinit.
+
+Two times are being reported:
+
+* **Scheduling** - how long was the thread initiating destruction blocked.
+* **Total** - time from initiating destruction, to the completion of the deinit body of the last object.
+
+For benchmarks where no hopping occurs, these two times should be almost identical.
+
+Benchmark driver outputs results to stdout, with a header recording resolved parameters and column names:
+
+```
+# isolated_no_hop_copy_tree --values=1:200:linear --objects=100:50000:linear --points=1000
+#
+# values objects Δschedule(ns) Δtotal(ns)
+103	13917	161251	161251
+8	19278	870707	869083
+196	16116	514958	515042
+...
+```
+
+Benchmark results then can be analyzed by a [helper script](./regression.py) that attempts to perform multi-variable linear regression:
+
+```shell
+$ ./regression.py --help
+usage: regression.py [-h] [-p PARAMS] [-y PHASES] [--min-values MIN_VALUES] [--max-values MAX_VALUES] [--min-objects MIN_OBJECTS] [--max-objects MAX_OBJECTS] dataset
+
+positional arguments:
+  dataset
+
+options:
+  -h, --help            show this help message and exit
+  -p PARAMS, --params PARAMS
+                        Parameters for fit against. Comma-separated list of vo2,vo,v,o2,o,1
+  -y PHASES, --phases PHASES
+                        Values for fit against. Comma-separated list of S,E,T - Scheduling, Execution, Total
+  --min-values MIN_VALUES
+  --max-values MAX_VALUES
+  --min-objects MIN_OBJECTS
+  --max-objects MAX_OBJECTS
+```
+
+By default it attempts to fit the data against all possible parameters, and may produce overfitting models.
+It is often helpful to manually limit parameters. E.g. `./regression.py dataset -p vo` will perform linear regression assuming costs are proportional to number of task-local **v**alues times number of **o**bjects.
+
+Additionally it is possible to filter phases being analyzed. `./regression.py dataset -y T -p vo` will show only results for the **Total** phase. Phase **Execution** is not present in the dataset explicitly, but is computed as `Total - Scheduling`.
+
+Benchmarks come in array and tree variants. Array variants allow to cleanly measure costs of scheduling, while tree variants attempt to closer mimic real-world scenarios.
+
+In tree variants of benchmarks which involve hopping, you can often see scheduling cost as negative. That's because in the baseline case destruction of the entire tree happens on the releasing thread, and cost is linear in number of objects. While in test case, releasing thread only schedules destruction of the root object, and cost is constant in number of objects. So negative cost per object (around 62ns) is actually the cost of executing regular deinit.
 
 ### Isolated deinit
 
@@ -62,7 +122,7 @@ $ ./run-benchmark.sh isolated_hop_reset_array --values=1:200 --objects=100:50000
 $ ./run-benchmark.sh isolated_hop_reset_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_tree.txt
 ```
 
-Slow path of the isolated deinit without copying task-local values costs about 140±15ns. These benchmarks are quite noisy, and different runs give slightly different values. 
+Slow path of the isolated deinit without copying task-local values costs about 140±15ns. These benchmarks are quite noisy, and different runs give slightly different values. Negative scheduling cost in the tree variant is a cost of regular deinit. While scheduling cost in the array case is the difference between scheduling isolated deinit of one object vs executing regular deinit of one object. Numbers might look similar, but that's just a coincidence.
 
 ![slow path of isolated deinit without copying task-local values using array of objects](img/isolated_hop_reset_array.png)
 ![slow path of isolated deinit without copying task-local values using tree of objects](img/isolated_hop_reset_tree.png)
@@ -79,6 +139,54 @@ Total     : 141.94008609136588⋅o, R² = 0.4787, Adjusted R² = 0.4781
 ```
 
 #### 4. Slow path - copy
+
+```shell
+$ ./run-benchmark.sh isolated_hop_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_hop_copy_array.txt
+$ ./run-benchmark.sh isolated_hop_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_hop_copy_tree.txt
+```
+
+Cost of the slow path of the isolated deinit with copying task-local values should have a component proportional to number of task-local values times number of objects and a component proportional to the number of objects. With the latter being around 140±15ns.
+
+But attempting to fit obtained datasets against both parameters at the same time gives different results:
+
+```shell
+$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o
+Total: 31.573328377151007⋅v⋅o + 381.57175474205997⋅o, R² = 0.9927, Adjusted R² = 0.9927
+$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o
+Total: 28.738011225317877⋅v⋅o + 372.19754197237535⋅o, R² = 0.9901, Adjusted R² = 0.9901
+```
+
+Zooming into different slices of the data, we can see very different values of the per-object cost:
+
+```shell
+$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --max-values=50
+Total: 35.41231274599847⋅v⋅o + 295.4159314254909⋅o, R² = 0.9837, Adjusted R² = 0.9836
+$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=51 --max-values=100
+Total: 30.43937937863101⋅v⋅o + 513.5787204278745⋅o, R² = 0.9890, Adjusted R² = 0.9890
+$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=101 --max-values=150
+Total: 30.7352158273628⋅v⋅o + 354.1501128539893⋅o, R² = 0.9902, Adjusted R² = 0.9902
+$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=151
+Total: 35.20485780959668⋅v⋅o + -200.04035254374978⋅o, R² = 0.9904, Adjusted R² = 0.9904
+$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --max-values=50
+Total: 33.216900687960575⋅v⋅o + 224.2335764217327⋅o, R² = 0.9588, Adjusted R² = 0.9585
+$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=51 --max-values=100
+Total: 30.440890643364302⋅v⋅o + 307.57812153045893⋅o, R² = 0.9793, Adjusted R² = 0.9791
+$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=101 --max-values=150
+Total: 30.66527564519561⋅v⋅o + 140.95025301835983⋅o, R² = 0.9839, Adjusted R² = 0.9838
+$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=151
+Total: 26.881033675654628⋅v⋅o + 653.9734628908678⋅o, R² = 0.9902, Adjusted R² = 0.9901
+```
+
+There should be no additional per-object cost when copying task-local values, so observed results are likely to be an indication of the overfitting.
+
+To isolate effects of the copying task-local values, let's benchmark it using isolated deinit without copying task-values as a baseline:
+
+```shell
+$ ./run-benchmark.sh isolated_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_copy_array.txt
+$ ./run-benchmark.sh isolated_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_copy_array.txt
+```
+
+
 
 ### Async deinit
 

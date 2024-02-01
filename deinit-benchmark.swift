@@ -520,7 +520,7 @@ func parseArgs(_ arguments: [String]) -> Args {
 }
 
 func printUsage() -> Never {
-    print("Usage: deinit-bechmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--points=POINTS]")
+    print("Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--points=POINTS]")
     print("Possible benchmark names:")
     for b in benchmarks.keys.sorted() {
         print("  * \(b) - \(benchmarks[b]!.help)")
