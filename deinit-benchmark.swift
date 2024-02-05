@@ -1,4 +1,5 @@
 import Dispatch
+import Foundation
 
 let TLs = (0..<10000).map { _ in
     TaskLocal<AnyObject?>(wrappedValue: nil)
@@ -39,6 +40,7 @@ class TreeBase<Child: Tree> {
 
     init(_ objects: Int, _ group: DispatchGroup, _ ballast: Int) {
         self.group = group
+        group.enter()
         
         let L = objects / 2
         let R = objects - 1 - L
@@ -174,11 +176,12 @@ struct ArrayBuilder: Builder {
     }
 }
 
+let clock = ContinuousClock()
+
 typealias Measurements = (schedule: Duration, total: Duration)
 func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int, ballast: Int) -> Measurements {
     let g = DispatchGroup()
     var storage = builder.build(type, numObjects, g, ballast)
-    let clock = ContinuousClock()
     let t1 = clock.now
     withExtendedLifetime(storage) {}
     storage = builder.empty
@@ -190,97 +193,34 @@ func measure(builder: any Builder.Type, type: any Tree.Type, numObjects: Int, ba
     return Measurements(schedule: s, total: t)
 }
 
-enum Distribution: CustomStringConvertible {
-    case linear
-    case logarithmic
-
-    var description: String {
-        switch self {
-            case .linear: return "linear"
-            case .logarithmic: return "logarithmic"
-        }
-    }
-}
-
-struct Domain: CustomStringConvertible {
-    var range: ClosedRange<Int>
-    var distribution: Distribution
-
-    var description: String {
-        "\(range.lowerBound):\(range.upperBound):\(distribution)"
-    }
-}
-
-struct Generator {
-    enum Impl {
-        case linear(ClosedRange<Int>)
-        case logarithmic(ClosedRange<Double>)
-    }
-    var impl: Impl
-
-    init(_ domain: Domain) {
-        switch domain.distribution {
-        case .linear:
-            self.impl = .linear(domain.range)
-        case .logarithmic:
-            let logRange = log(Double(domain.range.lowerBound))...log(Double(domain.range.upperBound))
-            self.impl = .logarithmic(logRange)
-        }
-    }
-
-    func generate() -> Int {
-        switch impl {
-        case .linear(let range):
-            return Int.random(in: range)
-        case .logarithmic(let logRange):
-            return Int(exp(Double.random(in: logRange)).rounded())
-        }
-    }
+struct InputParams {
+    var values: Int
+    var objects: Int
 }
 
 func benchmark(
     _ actor: isolated Actor,
     _ builder: any Builder.Type,
-    _ testType: any Tree.Type,
-    _ baselineType: any Tree.Type,
-    _ TLs: Domain,
-    _ objects: Domain,
+    _ type: any Tree.Type,
     _ ballast: Int,
-    _ points: Int
+    _ inputs: [InputParams]
 ) {
     withTLs(1) {
-        _ = measure(builder: builder, type: testType, numObjects: 1, ballast: 1)
-        _ = measure(builder: builder, type: baselineType, numObjects: 1, ballast: 1)
+        _ = measure(builder: builder, type: type, numObjects: 1, ballast: 1)
+        _ = measure(builder: builder, type: type, numObjects: 1, ballast: 1)
     }
 
-    let valuesGenerator = Generator(TLs)
-    let objectsGenerator = Generator(objects)
-
-    for i in 0..<points {
-        let numTLs = valuesGenerator.generate()
-        let numObjects = objectsGenerator.generate()
-        
-        withTLs(numTLs) {
-            let test: Measurements
-            let baseline: Measurements
-            if Bool.random() {
-                test = measure(builder: builder, type: testType, numObjects: numObjects, ballast: ballast)
-                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects, ballast: ballast)
-            } else {
-                baseline = measure(builder: builder, type: baselineType, numObjects: numObjects, ballast: ballast)
-                test = measure(builder: builder, type: testType, numObjects: numObjects, ballast: ballast)
-            }
-            let deltaSchedule = test.schedule - baseline.schedule
-            let deltaTotal = test.total - baseline.total
+    for (i, params) in inputs.enumerated() {
+        withTLs(params.values) {
+            let m: Measurements = measure(builder: builder, type: type, numObjects: params.objects, ballast: ballast)
             print(
-                numTLs, numObjects,
-                deltaSchedule.asNanoSeconds,
-                deltaTotal.asNanoSeconds,
+                m.schedule.asNanoSeconds,
+                m.total.asNanoSeconds,
                 separator: "\t"
             )
         }
 
-        fputs("\r\(i)/\(points)", stderr)
+        fputs("\r\(i + 1)/\(inputs.count)", stderr)
     }
     fputs("\n", stderr)
 }
@@ -289,70 +229,77 @@ struct Benchmark {
     var help: String
     var actor: Actor
     var builder: any Builder.Type
-    var testType: any Tree.Type
-    var baselineType: any Tree.Type
+    var type: any Tree.Type
 
-    func run(TLs: Domain, objects: Domain, ballast: Int, points: Int) async {
-        await benchmark(actor, builder, testType, baselineType, TLs, objects, ballast, points)
+    func run(inputs: [InputParams], ballast: Int) async {
+        await benchmark(actor, builder, type, ballast, inputs)
     }
 }
 
 let benchmarks: [String: Benchmark] = [
-    "async_tree": Benchmark(
-        help: "Measure cost of executing no-op deinit asynchronously vs inline using binary tree of objects",
-        actor: SecondActor.shared, builder: TreeBuilder.self, testType: AsyncNoOpResetTree.self, baselineType: NonisolatedTree.self
+    "nonisolated_array": Benchmark(
+        help: "Regular deinit using array of objects",
+        actor: FirstActor.shared, builder: ArrayBuilder.self, type: NonisolatedTree.self
     ),
-    "async_array": Benchmark(
-        help: "Measure cost of executing no-op deinit asynchronously vs inline using array of objects",
-        actor: SecondActor.shared, builder: ArrayBuilder.self, testType: AsyncNoOpResetTree.self, baselineType: NonisolatedTree.self
-    ),
-    "async_copy_tree": Benchmark(
-        help: "Measure cost of copying task locals in no-op async deinit using binary tree of objects",
-        actor: SecondActor.shared, builder: TreeBuilder.self, testType: AsyncNoOpCopyTree.self, baselineType: AsyncNoOpResetTree.self
-    ),
-    "async_copy_array": Benchmark(
-        help: "Measure cost of copying task locals in no-op async deinit using array of objects",
-        actor: SecondActor.shared, builder: ArrayBuilder.self, testType: AsyncNoOpCopyTree.self, baselineType: AsyncNoOpResetTree.self
-    ),
-    "isolated_no_hop_copy_tree": Benchmark(
-        help: "Measure cost of fast path of isolated deinit preserving task locals using binary tree of objects",
-        actor: FirstActor.shared, builder: TreeBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
+    "nonisolated_tree": Benchmark(
+        help: "Regular deinit using binary tree of objects",
+        actor: FirstActor.shared, builder: TreeBuilder.self, type: NonisolatedTree.self
     ),
     "isolated_no_hop_copy_array": Benchmark(
-        help: "Measure cost of fast path of isolated deinit preserving task locals using array of objects",
-        actor: FirstActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
+        help: "Fast path of isolated deinit preserving task locals using array of objects",
+        actor: FirstActor.shared, builder: ArrayBuilder.self, type: IsolatedCopyTree.self
     ),
-    "isolated_no_hop_reset_tree": Benchmark(
-        help: "Measure cost of fast path of isolated deinit inserting stop node using binary tree of objects",
-        actor: FirstActor.shared, builder: TreeBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
+    "isolated_no_hop_copy_tree": Benchmark(
+        help: "Fast path of isolated deinit preserving task locals using binary tree of objects",
+        actor: FirstActor.shared, builder: TreeBuilder.self, type: IsolatedCopyTree.self
     ),
     "isolated_no_hop_reset_array": Benchmark(
-        help: "Measure cost of fast path of isolated deinit inserting stop node using array of objects",
-        actor: FirstActor.shared, builder: ArrayBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
+        help: "Fast path of isolated deinit inserting stop node using array of objects",
+        actor: FirstActor.shared, builder: ArrayBuilder.self, type: IsolatedResetTree.self
     ),
-    "isolated_hop_copy_array": Benchmark(
-        help: "Measure cost of slow path of isolated deinit copying task locals using array of objects",
-        actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: NonisolatedTree.self
+    "isolated_no_hop_reset_tree": Benchmark(
+        help: "Fast path of isolated deinit inserting stop node using binary tree of objects",
+        actor: FirstActor.shared, builder: TreeBuilder.self, type: IsolatedResetTree.self
     ),
     "isolated_hop_reset_array": Benchmark(
-        help: "Measure cost of slow path of isolated deinit ignoring task locals using array of objects",
-        actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedResetTree.self, baselineType: NonisolatedTree.self
-    ),
-    "isolated_copy_array": Benchmark(
-        help: "Measure cost of copying task locals in slow path of isolated deinit using array of objects",
-        actor: SecondActor.shared, builder: ArrayBuilder.self, testType: IsolatedCopyTree.self, baselineType: IsolatedResetTree.self
-    ),
-    "isolated_hop_copy_tree": Benchmark(
-        help: "Measure cost of slow path of isolated deinit copying task locals using tree of objects",
-        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedCopyTree.self, baselineType: NonisolatedTree.self
+        help: "Slow path of isolated deinit ignoring task locals using array of objects",
+        actor: SecondActor.shared, builder: ArrayBuilder.self, type: IsolatedResetTree.self
     ),
     "isolated_hop_reset_tree": Benchmark(
-        help: "Measure cost of slow path of isolated deinit ignoring task locals using tree of objects",
-        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedResetTree.self, baselineType: NonisolatedTree.self
+        help: "Slow path of isolated deinit ignoring task locals using tree of objects",
+        actor: SecondActor.shared, builder: TreeBuilder.self, type: IsolatedResetTree.self
     ),
-    "isolated_copy_tree": Benchmark(
-        help: "Measure cost of copying task locals in slow path of isolated deinit using tree of objects",
-        actor: MainActor.shared, builder: TreeBuilder.self, testType: InterleavedCopyTree.self, baselineType: InterleavedResetTree.self
+    "isolated_hop_reset_tree_interleaved": Benchmark(
+        help: "Slow path of isolated deinit ignoring task locals using tree of objects",
+        actor: MainActor.shared, builder: TreeBuilder.self, type: InterleavedResetTree.self
+    ),
+    "isolated_hop_copy_array": Benchmark(
+        help: "Slow path of isolated deinit copying task locals using array of objects",
+        actor: SecondActor.shared, builder: ArrayBuilder.self, type: IsolatedCopyTree.self
+    ),
+    "isolated_hop_copy_tree": Benchmark(
+        help: "Slow path of isolated deinit copying task locals using tree of objects",
+        actor: SecondActor.shared, builder: TreeBuilder.self, type: IsolatedCopyTree.self
+    ),
+    "isolated_hop_copy_tree_interleaved": Benchmark(
+        help: "Slow path of isolated deinit copying task locals using tree of objects",
+        actor: MainActor.shared, builder: TreeBuilder.self, type: InterleavedCopyTree.self
+    ),
+    "async_reset_array": Benchmark(
+        help: "Async deinit ignoring task locals using array of objects",
+        actor: SecondActor.shared, builder: ArrayBuilder.self, type: AsyncNoOpResetTree.self
+    ),
+    "async_reset_tree": Benchmark(
+        help: "Async deinit ignoring task locals using binary tree of objects",
+        actor: SecondActor.shared, builder: TreeBuilder.self, type: AsyncNoOpResetTree.self
+    ),
+    "async_copy_array": Benchmark(
+        help: "Async deinit copying task locals using array of objects",
+        actor: SecondActor.shared, builder: ArrayBuilder.self, type: AsyncNoOpCopyTree.self
+    ),
+    "async_copy_tree": Benchmark(
+        help: "Async deinit copying task locals using binary tree of objects",
+        actor: SecondActor.shared, builder: TreeBuilder.self, type: AsyncNoOpCopyTree.self
     ),
 ]
 
@@ -363,97 +310,74 @@ extension String {
     }
 }
 
-func parseDomain(_ s: String, domain: inout Domain) -> Bool {
-    let components = s.split(separator: ":")
-    if components.count > 3 { return false }
-    
-    let minValue: Int
-    if components.count < 1 || components[0].isEmpty {
-        minValue = domain.range.lowerBound
-    } else {
-        guard let value = Int(components[0]) else { return false }
-        minValue = value
-    }
-
-    let maxValue: Int
-    if components.count < 2 || components[1].isEmpty {
-        maxValue = domain.range.upperBound
-    } else {
-        guard let value = Int(components[1]) else { return false }
-        maxValue = value
-    }
-
-    if minValue < 0 || maxValue < minValue { return false }
-
-    domain.range = minValue...maxValue
-
-    if components.count >= 3 {
-        switch components[2] {
-        case "":
-            break
-        case "linear":
-            domain.distribution = .linear
-        case "logarithmic":
-            domain.distribution = .logarithmic
-        default:
-            return false
-        }
-    }
-
-    return true
-}
-
 struct Args: CustomStringConvertible {
+    var inputsFileName: String
+    var inputs: [InputParams]
     var benchmarkName: String
     var benchmark: Benchmark
-    var values = Domain(range: 1...1_000, distribution: .linear)
-    var objects = Domain(range: 10...100_000, distribution: .linear)
     var ballast: Int = 0
-    var points: Int = 5_000
 
     var description: String {
-        "\(benchmarkName) --values=\(values) --objects=\(objects) --ballast=\(ballast) --points=\(points)"
+        "\(benchmarkName) \(inputsFileName) --ballast=\(ballast)"
     }
 
     @MainActor
     func run() async {
         print("# \(self)")
         print("#")
-        print("# values objects Δschedule(ns) Δtotal(ns) base-schedule(ns) base-total(ns) test-schedule(ns) test-total(ns)")
-        await benchmark.run(TLs: values, objects: objects, ballast: ballast, points: points)
+        print("# schedule(ns) total(ns)")
+        await benchmark.run(inputs: inputs, ballast: ballast)
     }
 }
 
 func parseArgs(_ arguments: [String]) -> Args {
+    if arguments.contains("--help") {
+        printUsage()
+    }
     if arguments.count < 2 || arguments[1].hasPrefix("--") {
+        print("Missing inputs file name")
+        printUsage()
+    }
+    let inputsFileName = arguments[1]
+    var inputs: [InputParams] = []
+    do {
+        let text = try String(contentsOfFile: inputsFileName, encoding: .utf8)
+        let lines = text.components(separatedBy: "\n")
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("#") || line.isEmpty {
+                continue
+            }
+            let comps = line.components(separatedBy: "\t")
+            if comps.count == 2, let v = Int(comps[0]), let o = Int(comps[1]), v >= 0, o > 0 {
+                inputs.append(InputParams(values: v, objects: o))
+            } else {
+                print("\(inputsFileName):\(i + 1): error: Invalid data")
+                print("  \(line)")
+                print("  \(String(repeating: "^", count: line.count))")
+            }
+        }
+    } catch {
+        print("Error reading from: \(inputsFileName)")
+        print(error)
+        exit(1)
+    }
+    if arguments.count < 3 || arguments[2].hasPrefix("--") {
         print("Missing benchmark name")
         printUsage()
     }
-    let benchmarkName = arguments[1]
+    let benchmarkName = arguments[2]
     guard let benchmark = benchmarks[benchmarkName] else {
-        print("Invalid benchmark name \"\(arguments[1])\"")
+        print("Invalid benchmark name \"\(benchmarkName)\"")
         printUsage()
     }
-    var result = Args(benchmarkName: benchmarkName, benchmark: benchmark)
-    for arg in arguments[2...] {
-        if let value = arg.removingPrefix("--values=") {
-            if !parseDomain(value, domain: &result.values) {
-                print("Invalid values domain \"\(value)\"")
-                printUsage()
-            }
-        } else if let value = arg.removingPrefix("--objects=") {
-            if !parseDomain(value, domain: &result.objects) {
-                print("Invalid objects domain \"\(value)\"")
-                printUsage()
-            }
-        } else if let value = arg.removingPrefix("--points=") {
-            if let n = Int(value), n > 0 {
-                result.points = n
-            } else {
-                print("Invalid number of points")
-                printUsage()
-            }
-        } else if let value = arg.removingPrefix("--ballast=") {
+    var result = Args(
+        inputsFileName: inputsFileName,
+        inputs: inputs,
+        benchmarkName: benchmarkName,
+        benchmark: benchmark
+    )
+    for arg in arguments[3...] {
+        if let value = arg.removingPrefix("--ballast=") {
             if let n = Int(value), n >= 0 {
                 result.ballast = n
             } else {
@@ -469,7 +393,8 @@ func parseArgs(_ arguments: [String]) -> Args {
 }
 
 func printUsage() -> Never {
-    print("Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--ballast=N] [--points=POINTS]")
+    print("Usage: deinit-benchmark BENCHMARK_NAME INPUTS_FILE [--ballast=N]")
+    print("Use ./gen-points.py to create INPUTS_FILE")
     print("Possible benchmark names:")
     for b in benchmarks.keys.sorted() {
         print("  * \(b) - \(benchmarks[b]!.help)")

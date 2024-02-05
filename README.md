@@ -14,50 +14,90 @@ Slow path of the isolated deinit with resetting task-local values costs about 14
 
 ### Setup
 
+#### [deinit-benchmark.swift](./deinit-benchmark.swift)
+
+Source code of the benchmark driver.
+
+#### [run-benchmark.sh](./run-benchmark.sh)
+
+Wrapper script which compiles, codesigns, and runs benchmark driver with appropriate runtime libraries.
+
 ```shell
 $ ./run-benchmark.sh --help
-Usage: deinit-benchmark BENCHMARK_NAME [--values=MIN:MAX:(linear|logarithmic)] [--objects=MIN:MAX:(linear|logarithmic)] [--points=POINTS]
+Usage: deinit-benchmark BENCHMARK_NAME INPUTS_FILE [--ballast=N]
 ```
 
-Benchmark driver generates specified number of data points, by choosing random number of task-local values and objects within specified ranges.
-Ranges are interpreted as closed intervals. It is possible to specify `MIN`=`MAX` to pin parameter to a specific value.
-
-To isolate incremental cost of new features, each benchmark measures a difference in time between test case and baseline case, e.g. destroying a tree of objects with isolated deinit vs destroying a tree of objects with regular deinit.
+Benchmark driver measures specified benchmark for numbers of task-local values and objects given in `INPUTS_FILE`.
+Using shared inputs allows results of different runs to be comparable between each other.
 
 Two times are being reported:
 
 * **Scheduling** - how long was the thread initiating destruction blocked.
 * **Total** - time from initiating destruction, to the completion of the deinit body of the last object.
 
-For benchmarks where no hopping occurs, these two times should be almost identical.
-
-Benchmark driver outputs results to stdout, with a header recording resolved parameters and column names:
+Benchmark driver outputs results to stdout, with a header recording parameters and showing column names:
 
 ```
-# isolated_no_hop_copy_tree --values=1:200:linear --objects=100:50000:linear --points=1000
+# isolated_hop_copy_tree data/inputs-5K.txt --ballast=0
 #
-# values objects Δschedule(ns) Δtotal(ns)
-103	13917	161251	161251
-8	19278	870707	869083
-196	16116	514958	515042
+# schedule(ns) total(ns)
+6584	8269500
+5750	13276667
+6000	4129208
 ...
 ```
 
-Benchmark results then can be analyzed by a [helper script](./regression.py) that attempts to perform multi-variable linear regression:
+For benchmarks where no hopping occurs, these two times should be almost identical.
+
+Benchmarks come in array and tree variants. Array variants allow to cleanly measure costs of scheduling, while tree variants attempt to better mimic real-world scenarios.
+
+All benchmarks use a single strong reference as a task-local value.
+
+#### [gen-points.py](./gen-points.py)
+
+This utility script can be used to generate inputs of desired configuration:
+```shell
+$ ./gen-points.py --help
+usage: gen-points.py [-h] [-v MIN:MAX] [-o MIN:MAX] points
+
+positional arguments:
+  points
+
+options:
+  -h, --help            show this help message and exit
+  -v MIN:MAX, --values MIN:MAX
+                        Range of number of task-local values (default: 0:200)
+  -o MIN:MAX, --objects MIN:MAX
+                        Range of number of objects (default: 1:5000)
+
+$ ./gen-points.py 1000 > data/inputs-1K.txt
+$ ./gen-points.py 5000 > data/inputs-5K.txt 
+```
+
+Ranges are interpreted as closed intervals. It is possible to specify `MIN`=`MAX` to pin parameter to a specific value.
+Otherwise values are generated randomly with linear distribution.
+
+#### [regression.py](./regression.py)
+
+Script for analyzing benchmark results by attempting to perform multi-variable linear regression:
 
 ```shell
 $ ./regression.py --help
-usage: regression.py [-h] [-p PARAMS] [-y PHASES] [--min-values MIN_VALUES] [--max-values MAX_VALUES] [--min-objects MIN_OBJECTS] [--max-objects MAX_OBJECTS] dataset
+usage: regression.py [-h] [-d BASELINE] [-p PARAMS] [-y PHASES] [--min-values MIN_VALUES] [--max-values MAX_VALUES] [--min-objects MIN_OBJECTS] [--max-objects MAX_OBJECTS]
+                     inputs dataset
 
 positional arguments:
+  inputs
   dataset
 
 options:
   -h, --help            show this help message and exit
+  -d BASELINE, --diff BASELINE
+                        Apply regression to difference between dataset and baseline (default: None)
   -p PARAMS, --params PARAMS
-                        Parameters for fit against. Comma-separated list of vo2,vo,v,o2,o,1
+                        Parameters for fit against. Comma-separated list of vo2,vo,v,o2,o,1 (default: vo,v,o,1)
   -y PHASES, --phases PHASES
-                        Values for fit against. Comma-separated list of S,E,T - Scheduling, Execution, Total
+                        Values for fit against. Comma-separated list of S,T - Scheduling, Total (default: S,T)
   --min-values MIN_VALUES
   --max-values MAX_VALUES
   --min-objects MIN_OBJECTS
@@ -67,39 +107,50 @@ options:
 By default it attempts to fit the data against all possible parameters, and may produce overfitting models.
 It is often helpful to manually limit parameters. E.g. `./regression.py dataset -p vo` will perform linear regression assuming costs are proportional to number of task-local **v**alues times number of **o**bjects.
 
-Additionally it is possible to filter phases being analyzed. `./regression.py dataset -y T -p vo` will show only results for the **Total** phase. Phase **Execution** is not present in the dataset explicitly, but is computed as `Total - Scheduling`.
+Additionally it is possible to filter phases being analyzed. `./regression.py dataset -y T -p vo` will show only results for the **Total** phase.
 
-Benchmarks come in array and tree variants. Array variants allow to cleanly measure costs of scheduling, while tree variants attempt to closer mimic real-world scenarios.
-
-In tree variants of benchmarks which involve hopping, you can often see scheduling cost as negative. That's because in the baseline case destruction of the entire tree happens on the releasing thread, and cost is linear in number of objects. While in test case, releasing thread only schedules destruction of the root object, and cost is constant in number of objects. So negative cost per object (around 62ns) is actually the cost of executing regular deinit.
+To isolate incremental cost of new features, it is possible to perform regression against difference of two datasets. Baseline dataset can be specified using `--diff` parameter.
 
 ### Isolated deinit
+
+#### 0. Baseline
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt nonisolated_array > data/nonisolated_array-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt nonisolated_tree > data/nonisolated_tree-5K.txt
+$ ./regression.py data/inputs-5K.txt data/nonisolated_array-5K.txt -p o -y T
+Total: 64⋅o, R² = 0.9950, Adjusted R² = 0.9950
+$ ./regression.py data/inputs-5K.txt data/nonisolated_tree-5K.txt -p o -y T
+Total: 63⋅o, R² = 0.6515, Adjusted R² = 0.6515
+```
+
+Deinitializing objects with regular deinit costs about 64ns. Of course, this varies depending on the stored properties and body of the `deinit`,
+but this number is useful as a baseline for other benchmarks, which all have the same stored properties and `deinit` body.
 
 #### 1. Fast path - copy
 
 ```shell
-$ ./run-benchmark.sh isolated_no_hop_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_copy_array.txt
-$ ./run-benchmark.sh isolated_no_hop_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_copy_tree.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_copy_array > data/isolated_no_hop_copy_array-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_copy_tree > data/isolated_no_hop_copy_tree-5K.txt
 ```
 
 When copying (not resetting) task-local values, performance of the fast path of the isolated deinit does not depend on number of task-local values,
-and costs about 16ns per object for array case and 18ns per object for tree case.
-The 2ns difference is reproducible, but its origin is not clear.
+and costs about 16ns per object for array case and 18ns per object for tree case. Despite low R² for tree case, results are reproducible. The origin of the 2ns difference is not clear.
 
 ![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_copy.png)
 
 ```shell
-$ ./regression.py data/isolated_no_hop_copy_array.txt -y T -p o
-Total: 15.597339284634334⋅o, R² = 0.9066, Adjusted R² = 0.9065
-$ ./regression.py data/isolated_no_hop_copy_tree.txt -y T -p o
-Total: 18.455656955023045⋅o, R² = 0.9307, Adjusted R² = 0.9307
+$ ./regression.py data/inputs-5K.txt data/isolated_no_hop_copy_array-5K.txt --diff data/nonisolated_array-5K.txt -p o -y T
+Total: 16⋅o, R² = 0.8352, Adjusted R² = 0.8351
+$ ./regression.py data/inputs-5K.txt data/isolated_no_hop_copy_tree-5K.txt --diff data/nonisolated_tree-5K.txt -p o -y T
+Total: 18⋅o, R² = 0.1261, Adjusted R² = 0.1260
 ```
 
 #### 2. Fast path - reset
 
 ```shell
-$ ./run-benchmark.sh isolated_no_hop_reset_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_array.txt
-$ ./run-benchmark.sh isolated_no_hop_reset_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_tree.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_reset_array > data/isolated_no_hop_reset_array-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_reset_tree > data/isolated_no_hop_reset_tree-5K.txt
 ```
 
 When resetting task-local values, performance of the fast path of the isolated deinit also does not depend on number of task-local values, but costs per object are higher - 36ns for array case and 41ns for tree case. The 5ns difference between cases is reproducible, but its origin is not clear.
@@ -109,19 +160,103 @@ Extra work needed to reset task-local values is about 20ns per object.
 ![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_reset.png)
 
 ```shell
-$ ./regression.py data/isolated_no_hop_reset_array.txt -y T -p o
-Total: 35.786485003793004⋅o, R² = 0.9743, Adjusted R² = 0.9742
-$ ./regression.py data/isolated_no_hop_reset_tree.txt -y T -p o
-Total: 41.01587233652484⋅o, R² = 0.9746, Adjusted R² = 0.9746
+$ ./regression.py data/inputs-5K.txt data/isolated_no_hop_reset_array-5K.txt --diff data/nonisolated_array-5K.txt -p o -y T
+Total: 36⋅o, R² = 0.9446, Adjusted R² = 0.9446
+$ ./regression.py data/inputs-5K.txt data/isolated_no_hop_reset_tree-5K.txt --diff data/nonisolated_tree-5K.txt -p o -y T
+Total: 41⋅o, R² = 0.4243, Adjusted R² = 0.4242
 ```
 
 #### 3. Slow path - reset
 
+#### 3.1. Array
+
 ```shell
-$ ./run-benchmark.sh isolated_hop_reset_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_array.txt
-$ ./run-benchmark.sh isolated_hop_reset_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_no_hop_reset_tree.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_array > data/isolated_hop_reset_array-5K.txt
 ```
 
+To interpret benchmark results we need to understand interaction between enqueueing and dequeueing tasks:
+
+```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K.txt -p o   
+Scheduling: 117⋅o, R² = 0.5794, Adjusted R² = 0.5793
+Total     : 195⋅o, R² = 0.7279, Adjusted R² = 0.7278
+```
+
+Since total execution time is significantly larger then scheduling time, we can assume that draining the actor queue is happening slower then enqueueing.
+Most of the time, actor queue is non-empty, and enqueueing and draining happens in parallel. Draining thread is not waiting for the enqueueing thread.
+
+Measurements are quite noisy. Repeated benchmarks give slightly different values. Let's take enqueueing cost to be about 115ns.
+```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-2.txt -y S -p o
+Scheduling: 108⋅o, R² = 0.6572, Adjusted R² = 0.6572
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-3.txt -y S -p o
+Scheduling: 123⋅o, R² = 0.6173, Adjusted R² = 0.6172
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-4.txt -y S -p o
+Scheduling: 124⋅o, R² = 0.5400, Adjusted R² = 0.5399
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-5.txt -y S -p o
+Scheduling: 107⋅o, R² = 0.5702, Adjusted R² = 0.5702
+```
+
+And let's take additional cost of the dequeueing is about 140ns.
+
+```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 130⋅o, R² = 0.5423, Adjusted R² = 0.5422
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-2.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 125⋅o, R² = 0.6572, Adjusted R² = 0.6572
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-3.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 160⋅o, R² = 0.6471, Adjusted R² = 0.6470
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-4.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 140⋅o, R² = 0.4657, Adjusted R² = 0.4656
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-5K-5.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 154⋅o, R² = 0.5977, Adjusted R² = 0.5976
+```
+
+#### 3.2. Tree
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_array > data/isolated_hop_reset_array-5K.txt
+```
+
+If entire tree is isolated to the same actor, hopping happens only for the root node.
+Rest of the nodes behave as fast path with resetting, and should have similar performance.
+
+```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree-5K.txt -p o,1                                           
+Scheduling:   0⋅o  + 2159, R² = 0.0112, Adjusted R² = 0.0108
+Total     : 115⋅o + 11683, R² = 0.8585, Adjusted R² = 0.8584
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree-5K.txt --diff data/isolated_no_hop_reset_tree-5K.txt -y T -p o                    
+Total: 14⋅o, R² = 0.0287, Adjusted R² = 0.0285
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree-5K.txt --diff data/isolated_no_hop_reset_tree-5K.txt -y T -p o,1
+Total: 10⋅o + 14482, R² = 0.0396, Adjusted R² = 0.0392
+```
+
+Scheduling of the root node triggers actor transition from `Idle` into `Scheduled` state and scheduling of actor processing job, which has a relatively large constant cost of about 2-2.5μs.
+
+There is also small and noisy difference in per-object costs compared to the fast path. Origin of this difference is not clear.
+
+To benchmark hopping per each node of the tree, we need to construct a tree where each node has a different isolation than the parent. Using only two actors, we end up with a tree where even layers are isolated to one actor, and odd layers to another.
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_tree_interleaved > data/isolated_hop_reset_tree_interleaved-5K.txt
+```
+
+Since this is a binary tree, one actor processes about ⅔ of all nodes, and another - about ⅓.
+
+Both actors perform enqueueing (to another one's queue) and dequeueing. But only the actor that finishes last affects the measured time. So expected time is about ⅔ of the sum of `Scheduling` and `Total` times from slow path array case.
+
+```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree_interleaved-5K.txt -p o,1
+Scheduling:   0⋅o  + 2209, R² = 0.0006, Adjusted R² = 0.0002
+Total     : 317⋅o + 33142, R² = 0.4677, Adjusted R² = 0.4674
+```
+
+For the tree case scheduling time is virtually zero, because it covers only enqueueing of the root object. Enqueueing of all the descendant nodes,
+is measured as part of total time.
+
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree-5K.txt -p o                                     
+Scheduling:   1⋅o, R² = -0.8523, Adjusted R² = -0.8527
+Total     : 170⋅o, R² =  0.5965, Adjusted R² =  0.5965
 Slow path of the isolated deinit without copying task-local values costs about 140±15ns. These benchmarks are quite noisy, and different runs give slightly different values. Negative scheduling cost in the tree variant is a cost of regular deinit. While scheduling cost in the array case is the difference between scheduling isolated deinit of one object vs executing regular deinit of one object. Numbers might look similar, but that's just a coincidence.
 
 ![slow path of isolated deinit without copying task-local values using array of objects](img/isolated_hop_reset_array.png)
