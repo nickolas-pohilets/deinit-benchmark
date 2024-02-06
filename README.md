@@ -211,7 +211,7 @@ Total: 154⋅o, R² = 0.5977, Adjusted R² = 0.5976
 #### 3.2. Tree
 
 ```shell
-$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_array > data/isolated_hop_reset_array-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_tree > data/isolated_hop_reset_tree-5K.txt
 ```
 
 If entire tree is isolated to the same actor, hopping happens only for the root node.
@@ -331,6 +331,34 @@ Enabling copying task-local values, without any values to copy does not incur ad
 ![Cost of copying task-local values in slow path of isolated deinit using array of objects](img/isolated_copy_array.png)
 
 #### 4.2. Tree
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_tree > data/isolated_hop_copy_tree-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree-5K.txt --diff data/isolated_hop_reset_tree-5K.txt -y S -p vo,v,o
+Scheduling: 0⋅v⋅o + 22⋅v  - 0⋅o, R² = 0.3849, Adjusted R² = 0.3845
+Total     : 0⋅v⋅o  - 4⋅v - 35⋅o, R² = 0.3273, Adjusted R² = 0.3269
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree-5K.txt --diff data/isolated_hop_reset_tree-5K.txt -y S -p v     
+Scheduling: 21⋅v, R² = 0.3634, Adjusted R² = 0.3633
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree-5K.txt --diff data/isolated_hop_reset_tree-5K.txt -y T -p o
+Total: -34⋅o, R² = 0.3269, Adjusted R² = 0.3267
+```
+
+If entire tree is isolated to the same actor, hopping and copying task-local values happens only for the root node.
+But resetting task-locals incurs cost per object, for the rest of the nodes.
+So for object trees larger than number of task-local values, copying is cheaper than resetting, if entire tree is isolated to the same actor.
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_tree_interleaved > data/isolated_hop_copy_tree_interleaved-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree_interleaved-5K.txt --diff data/isolated_hop_reset_tree_interleaved-5K.txt
+Scheduling: -0⋅v⋅o   + 28⋅v   + 0⋅o   + 950, R² = 0.3882, Adjusted R² = 0.3877
+Total     : 26⋅v⋅o - 1164⋅v + 240⋅o - 24378, R² = 0.9435, Adjusted R² = 0.9434
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree_interleaved-5K.txt --diff data/isolated_hop_reset_tree_interleaved-5K.txt -y S -p v
+Scheduling: 36⋅v, R² = 0.3357, Adjusted R² = 0.3355
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_tree_interleaved-5K.txt --diff data/isolated_hop_reset_tree_interleaved-5K.txt -y T -p vo
+Total: 27⋅v⋅o, R² = 0.9403, Adjusted R² = 0.9403
+```
+
+For interleaved tree, as expected, each task-local increases cost of scheduling of the root node by 35ns. Increase in execution time by 27ns can be explained as sum of scheduling costs (31ns) plus execution costs (20ns) distributed over two actors.
 
 ### Async deinit
 
