@@ -137,8 +137,6 @@ $ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_copy_tree > data/isolate
 When copying (not resetting) task-local values, performance of the fast path of the isolated deinit does not depend on number of task-local values,
 and costs about 16ns per object for array case and 18ns per object for tree case. Despite low R² for tree case, results are reproducible. The origin of the 2ns difference is not clear.
 
-![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_copy.png)
-
 ```shell
 $ ./regression.py data/inputs-5K.txt data/isolated_no_hop_copy_array-5K.txt --diff data/nonisolated_array-5K.txt -p o -y T
 Total: 16⋅o, R² = 0.8352, Adjusted R² = 0.8351
@@ -156,8 +154,6 @@ $ ./run-benchmark.sh data/inputs-5K.txt isolated_no_hop_reset_tree > data/isolat
 When resetting task-local values, performance of the fast path of the isolated deinit also does not depend on number of task-local values, but costs per object are higher - 36ns for array case and 41ns for tree case. The 5ns difference between cases is reproducible, but its origin is not clear.
 
 Extra work needed to reset task-local values is about 20ns per object.
-
-![fast path of isolated deinit preserving task-local values](img/isolated_no_hop_reset.png)
 
 ```shell
 $ ./regression.py data/inputs-5K.txt data/isolated_no_hop_reset_array-5K.txt --diff data/nonisolated_array-5K.txt -p o -y T
@@ -266,6 +262,8 @@ Constant cost of scheduling is consistent with the non-interleaved tree benchmar
 
 #### 4. Slow path - copy
 
+#### 4.1. Array
+
 ```shell
 $ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_array > data/isolated_hop_copy_array-5K.txt
 $ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-5K.txt -p vo,o
@@ -328,7 +326,11 @@ Scheduling: 97⋅o, R² = 0.5710, Adjusted R² = 0.5709
 Total     : 31⋅o, R² = 0.1053, Adjusted R² = 0.1051
 ```
 
-Enabling copying task-local values, without any values to copy does not incur additional costs, but copying the first task-local value comes with additional cost of about 60-65ns per object.
+Enabling copying task-local values, without any values to copy does not incur additional costs, but copying the first task-local value comes with additional cost of about 60-65ns per object for scheduling. Total time measurements are too noisy to draw any useful conclusions.
+
+![Cost of copying task-local values in slow path of isolated deinit using array of objects](img/isolated_copy_array.png)
+
+#### 4.2. Tree
 
 ### Async deinit
 
@@ -438,8 +440,6 @@ Surprisingly there seems to be linear dependency between execution time and numb
 ```shell
 $ ./run-benchmark.sh async_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_tree.txt 
 ```
-
-![cost of copying task-locals in async deinit of tree of objects](img/async_copy_tree.png)
 
 Difference in scheduling is too noisy to draw any conclusions about effect of copying task-locals on scheduling of the destruction of the root of the tree:
 
