@@ -241,87 +241,94 @@ To benchmark hopping per each node of the tree, we need to construct a tree wher
 $ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_tree_interleaved > data/isolated_hop_reset_tree_interleaved-5K.txt
 ```
 
-Since this is a binary tree, one actor processes about ⅔ of all nodes, and another - about ⅓.
+Both actors perform enqueueing (to another one's queue) and dequeueing, so total amount of work should be approximately equal
+to the sum of `Scheduling` and `Total` times from slow path array case.
 
-Both actors perform enqueueing (to another one's queue) and dequeueing. But only the actor that finishes last affects the measured time. So expected time is about ⅔ of the sum of `Scheduling` and `Total` times from slow path array case.
+But this work is distributed between two actors, and the actor which finishes its jobs last determines the reported time.
+In the best case scenario, both actors do equal amounts of work, and finish in half the time of the array case.
+In the worst case scenario, one of the actors does twice the amount of work of another, and both actors finish in about ⅔ of the time of the array case.
 
 ```shell
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree_interleaved-5K.txt -p o  
+Scheduling:   1⋅o, R² = -0.4648, Adjusted R² = -0.4651
+Total     : 169⋅o, R² =  0.8082, Adjusted R² =  0.8081
 $ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree_interleaved-5K.txt -p o,1
-Scheduling:   0⋅o  + 2209, R² = 0.0006, Adjusted R² = 0.0002
-Total     : 317⋅o + 33142, R² = 0.4677, Adjusted R² = 0.4674
+Scheduling:  -0⋅o  + 1745, R² = 0.0001, Adjusted R² = -0.0003
+Total     : 163⋅o + 18001, R² = 0.8093, Adjusted R² =  0.8093
 ```
 
-For the tree case scheduling time is virtually zero, because it covers only enqueueing of the root object. Enqueueing of all the descendant nodes,
-is measured as part of total time.
-
-$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_tree-5K.txt -p o                                     
-Scheduling:   1⋅o, R² = -0.8523, Adjusted R² = -0.8527
-Total     : 170⋅o, R² =  0.5965, Adjusted R² =  0.5965
-Slow path of the isolated deinit without copying task-local values costs about 140±15ns. These benchmarks are quite noisy, and different runs give slightly different values. Negative scheduling cost in the tree variant is a cost of regular deinit. While scheduling cost in the array case is the difference between scheduling isolated deinit of one object vs executing regular deinit of one object. Numbers might look similar, but that's just a coincidence.
-
-![slow path of isolated deinit without copying task-local values using array of objects](img/isolated_hop_reset_array.png)
-![slow path of isolated deinit without copying task-local values using tree of objects](img/isolated_hop_reset_tree.png)
-
-```shell
-$ ./regression.py data/isolated_hop_reset_array.txt -p o
-Scheduling:   62.5140761844284⋅o, R² = 0.3945, Adjusted R² = 0.3939
-Execution :  66.82597716990809⋅o, R² = 0.9581, Adjusted R² = 0.9581
-Total     : 129.34005335433648⋅o, R² = 0.6737, Adjusted R² = 0.6734
-$ ./regression.py data/isolated_hop_reset_tree.txt -p o
-Scheduling: -62.33280375475336⋅o, R² = 0.9956, Adjusted R² = 0.9956
-Execution : 204.27288984611926⋅o, R² = 0.6524, Adjusted R² = 0.6520
-Total     : 141.94008609136588⋅o, R² = 0.4787, Adjusted R² = 0.4781
 ```
+169 / (117 + 195) ≈ 54%
+163 / (117 + 195) ≈ 52%
+```
+
+Constant cost of scheduling is consistent with the non-interleaved tree benchmark, and per object costs are within expected range.
 
 #### 4. Slow path - copy
 
 ```shell
-$ ./run-benchmark.sh isolated_hop_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_hop_copy_array.txt
-$ ./run-benchmark.sh isolated_hop_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_hop_copy_tree.txt
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_array > data/isolated_hop_copy_array-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-5K.txt -p vo,o
+Scheduling: 32⋅v⋅o + 486⋅o, R² = 0.9680, Adjusted R² = 0.9680
+Total     : 32⋅v⋅o + 492⋅o, R² = 0.9677, Adjusted R² = 0.9677
 ```
 
-Cost of the slow path of the isolated deinit with copying task-local values should have a component proportional to number of task-local values times number of objects and a component proportional to the number of objects. With the latter being around 140±15ns.
+Copying task-local values increases cost of scheduling and changes dynamics between enqueueing and dequeueing.
+With enqueueing being slower, queue remains empty most of the time and dequeueing thread is waiting for the enqueueing one.
+It is not possible to measure costs of execution in this mode of operation.
+To make them visible, we can make dequeueing slower by adding ballast to the deinit body.
+A dummy call to `arc4random()` is used as a ballast. It cannot be optimized away by the compiler, and takes amount of time comparable to values being measured.
 
-But attempting to fit obtained datasets against both parameters at the same time gives different results:
+We can verify that amount of ballast is sufficient by zooming in on the subset of data with high number of task-local values:
 
 ```shell
-$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o
-Total: 31.573328377151007⋅v⋅o + 381.57175474205997⋅o, R² = 0.9927, Adjusted R² = 0.9927
-$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o
-Total: 28.738011225317877⋅v⋅o + 372.19754197237535⋅o, R² = 0.9901, Adjusted R² = 0.9901
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_array --ballast=80 > data/isolated_hop_copy_array-b80-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-b80-5K.txt -p vo,o --min-values=180
+Scheduling: 32⋅v⋅o + 486⋅o, R² = 0.9680, Adjusted R² = 0.9680
+Total     : 32⋅v⋅o + 492⋅o, R² = 0.9677, Adjusted R² = 0.9677
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_copy_array --ballast=100 > data/isolated_hop_copy_array-b100-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-b100-5K.txt -p vo,o --min-values=180               
+Scheduling: 21⋅v⋅o + 2000⋅o, R² = 0.9905, Adjusted R² = 0.9905
+Total     : 17⋅v⋅o + 4259⋅o, R² = 0.9909, Adjusted R² = 0.9909
 ```
 
-Zooming into different slices of the data, we can see very different values of the per-object cost:
+Zooming out to the entire dataset we can see that copying 1 task-local value costs about 30-35ns when scheduling and about 20ns when executing isolated deinit:
+```shell
+$  ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-b100-5K.txt -p vo,o                 
+Scheduling: 31⋅v⋅o   + 38⋅o, R² = 0.9948, Adjusted R² = 0.9948
+Total     : 19⋅v⋅o + 3987⋅o, R² = 0.9947, Adjusted R² = 0.9947
+```
+
+To better isolate cost of the task-local values we can generate dataset with reset task-local values with the same ballast and examine the difference:
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt isolated_hop_reset_array --ballast=100 > data/isolated_hop_reset_array-b100-5K.txt
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_reset_array-b100-5K.txt -p vo,o 
+Scheduling: 0⋅v⋅o   + 62⋅o, R² = 0.9905, Adjusted R² = 0.9905
+Total     : 0⋅v⋅o + 3901⋅o, R² = 0.9994, Adjusted R² = 0.9994
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-b100-5K.txt --diff data/isolated_hop_reset_array-b100-5K.txt -p vo,o 
+Scheduling: 31⋅v⋅o - 23⋅o, R² = 0.9947, Adjusted R² = 0.9947
+Total     : 19⋅v⋅o + 85⋅o, R² = 0.9765, Adjusted R² = 0.9765
+$ ./regression.py data/inputs-5K.txt data/isolated_hop_copy_array-b100-5K.txt --diff data/isolated_hop_reset_array-b100-5K.txt -p vo   
+Scheduling: 31⋅v⋅o, R² = 0.9946, Adjusted R² = 0.9946
+Total     : 20⋅v⋅o, R² = 0.9757, Adjusted R² = 0.9757
+```
+
+To clarify if copying task-local values incurs addition per-object code, we can benchmark with number of task-local values set to 0 and to 1:
 
 ```shell
-$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --max-values=50
-Total: 35.41231274599847⋅v⋅o + 295.4159314254909⋅o, R² = 0.9837, Adjusted R² = 0.9836
-$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=51 --max-values=100
-Total: 30.43937937863101⋅v⋅o + 513.5787204278745⋅o, R² = 0.9890, Adjusted R² = 0.9890
-$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=101 --max-values=150
-Total: 30.7352158273628⋅v⋅o + 354.1501128539893⋅o, R² = 0.9902, Adjusted R² = 0.9902
-$ ./regression.py data/isolated_hop_copy_array.txt -y T -p vo,o --min-values=151
-Total: 35.20485780959668⋅v⋅o + -200.04035254374978⋅o, R² = 0.9904, Adjusted R² = 0.9904
-$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --max-values=50
-Total: 33.216900687960575⋅v⋅o + 224.2335764217327⋅o, R² = 0.9588, Adjusted R² = 0.9585
-$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=51 --max-values=100
-Total: 30.440890643364302⋅v⋅o + 307.57812153045893⋅o, R² = 0.9793, Adjusted R² = 0.9791
-$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=101 --max-values=150
-Total: 30.66527564519561⋅v⋅o + 140.95025301835983⋅o, R² = 0.9839, Adjusted R² = 0.9838
-$ ./regression.py data/isolated_hop_copy_tree.txt -y T -p vo,o --min-values=151
-Total: 26.881033675654628⋅v⋅o + 653.9734628908678⋅o, R² = 0.9902, Adjusted R² = 0.9901
+$ ./run-benchmark.sh data/inputs-5K-0-values.txt isolated_hop_reset_array --ballast=5 > data/isolated_hop_reset_array-b5-v0-5K.txt
+$ ./run-benchmark.sh data/inputs-5K-0-values.txt isolated_hop_copy_array --ballast=5 > data/isolated_hop_copy_array-b5-v0-5K.txt
+$ ./run-benchmark.sh data/inputs-5K-1-value.txt isolated_hop_reset_array --ballast=5 > data/isolated_hop_reset_array-b5-v1-5K.txt 
+$ ./run-benchmark.sh data/inputs-5K-1-value.txt isolated_hop_copy_array --ballast=5 > data/isolated_hop_copy_array-b5-v1-5K.txt 
+$ ./regression.py data/inputs-5K-0-values.txt data/isolated_hop_copy_array-b5-v0-5K.txt --diff data/isolated_hop_reset_array-b5-v0-5K.txt -p o 
+Scheduling: 3⋅o, R² = 0.0056, Adjusted R² =  0.0054
+Total     : 1⋅o, R² = 0.0000, Adjusted R² = -0.0002
+$ ./regression.py data/inputs-5K-1-value.txt data/isolated_hop_copy_array-b5-v1-5K.txt --diff data/isolated_hop_reset_array-b5-v1-5K.txt -p o
+Scheduling: 97⋅o, R² = 0.5710, Adjusted R² = 0.5709
+Total     : 31⋅o, R² = 0.1053, Adjusted R² = 0.1051
 ```
 
-There should be no additional per-object cost when copying task-local values, so observed results are likely to be an indication of the overfitting.
-
-To isolate effects of the copying task-local values, let's benchmark it using isolated deinit without copying task-values as a baseline:
-
-```shell
-$ ./run-benchmark.sh isolated_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/isolated_copy_array.txt
-$ ./run-benchmark.sh isolated_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/isolated_copy_array.txt
-```
-
-
+Enabling copying task-local values, without any values to copy does not incur additional costs, but copying the first task-local value comes with additional cost of about 60-65ns per object.
 
 ### Async deinit
 

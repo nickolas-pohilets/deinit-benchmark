@@ -318,7 +318,7 @@ struct Args: CustomStringConvertible {
     var ballast: Int = 0
 
     var description: String {
-        "\(benchmarkName) \(inputsFileName) --ballast=\(ballast)"
+        "\(inputsFileName) \(benchmarkName) --ballast=\(ballast)"
     }
 
     @MainActor
