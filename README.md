@@ -360,127 +360,88 @@ Total: 27⋅v⋅o, R² = 0.9403, Adjusted R² = 0.9403
 
 For interleaved tree, as expected, each task-local increases cost of scheduling of the root node by 35ns. Increase in execution time by 27ns can be explained as sum of scheduling costs (31ns) plus execution costs (20ns) distributed over two actors.
 
-### Async deinit
+### 5. Async deinit - reset
 
-First let's validate that performance of async deinit without copying task-local values does not depend on the number of task-local values.
-
-Two benchmarks can be used for this:
-* `async_tree` - deallocates a binary tree of given size
-* `async_array` - deallocates a array of objects
-
-We fix range of number objects to a fixed value, and let number of task-local values be selected randomly from a linear distribution.
-Benchmark is repeated for 3 different values of number of objects.
-
+#### 5.1. Array
 
 ```shell
-$ ./run-benchmark.sh async_tree --values=1:200 --objects=100:100 --points=1000 > data/async_tree-vs-values-100.txt 
-$ ./run-benchmark.sh async_tree --values=1:200 --objects=1000:1000 --points=1000 > data/async_tree-vs-values-1000.txt
-$ ./run-benchmark.sh async_tree --values=1:200 --objects=5000:5000 --points=1000 > data/async_tree-vs-values-5000.txt
-$ ./run-benchmark.sh async_array --values=1:200 --objects=100:100 --points=1000 > data/async_array-vs-values-100.txt 
-$ ./run-benchmark.sh async_array --values=1:200 --objects=1000:1000 --points=1000 > data/async_array-vs-values-1000.txt
-$ ./run-benchmark.sh async_array --values=1:200 --objects=5000:5000 --points=1000 > data/async_array-vs-values-5000.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array > data/async_reset_array-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array > data/async_reset_array-5K-2.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array > data/async_reset_array-5K-3.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array > data/async_reset_array-5K-4.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array > data/async_reset_array-5K-5.txt
+
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K.txt -y S -p o
+Scheduling: 272⋅o, R² = 0.8759, Adjusted R² = 0.8758
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-2.txt -y S -p o
+Scheduling: 259⋅o, R² = 0.8315, Adjusted R² = 0.8315
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-3.txt -y S -p o
+Scheduling: 278⋅o, R² = 0.8398, Adjusted R² = 0.8398
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-4.txt -y S -p o
+Scheduling: 266⋅o, R² = 0.9503, Adjusted R² = 0.9503
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-5.txt -y S -p o
+Scheduling: 278⋅o, R² = 0.8976, Adjusted R² = 0.8976
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K.txt -y S -p o
+Scheduling: 272⋅o, R² = 0.8759, Adjusted R² = 0.8758
+
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K.txt -y T -p o
+Total: 384⋅o, R² = 0.9343, Adjusted R² = 0.9343
+
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 319⋅o, R² = 0.9077, Adjusted R² = 0.9077
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-2.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 318⋅o, R² = 0.8809, Adjusted R² = 0.8808
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-3.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 310⋅o, R² = 0.8651, Adjusted R² = 0.8651
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-4.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 313⋅o, R² = 0.9658, Adjusted R² = 0.9658
+$ ./regression.py data/inputs-5K.txt data/async_reset_array-5K-5.txt --diff data/nonisolated_array-5K.txt -y T -p o 
+Total: 321⋅o, R² = 0.9197, Adjusted R² = 0.9197
 ```
 
-Plotting results shows pretty much horizontal lines. For easier comparison durations are normalized per number of objects.
+Total time is larger then scheduling time, which indicates that enqueueing is slower than dequeueing, and execution cost can be measured.
 
-![async deinit of a tree vs number of task-local values](img/async_tree-vs-values.png)
-![async deinit of an array vs number of task-local values](img/async_array-vs-values.png)
+Scheduling async deinit costs about 270ns and executing - about extra 315ns, though data is quite noisy.
 
-And attempting to perform regression against number of task-local values gives rubbish R².
+#### 5.2. Tree
 
 ```shell
-$ ./regression.py data/async_tree-vs-values-100.txt -p v,1 
-Scheduling: 0.14720034717678354⋅v + -4884.234931270247, R² = 0.0000, Adjusted R² = -0.0020
-Execution :  -23.699491793629342⋅v + 54000.76281262156, R² = 0.0209, Adjusted R² =  0.0189
-Total     :  -23.552291446452447⋅v + 49116.52788135131, R² = 0.0224, Adjusted R² =  0.0205
-$ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
-Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² =  0.0006
-Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = -0.0018
-Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = -0.0016
-$ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = -0.0019
-Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = -0.0020
-Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = -0.0020
-$ ./regression.py data/async_array-vs-values-100.txt -p v,1
-Scheduling: 2.4317184474247444⋅v + 14124.10763059641, R² = 0.0003, Adjusted R² = -0.0017
-Execution : 7.186227269560555⋅v + 30009.201698502035, R² = 0.0027, Adjusted R² =  0.0007
-Total     :  9.617945716985414⋅v + 44133.30932909846, R² = 0.0027, Adjusted R² =  0.0007
-$ ./regression.py data/async_tree-vs-values-1000.txt -p v,1
-Scheduling:  -3.753269983170878⋅v + -58393.73801655156, R² = 0.0026, Adjusted R² =  0.0006
-Execution :  -7.547297728769095⋅v + 403978.00344176096, R² = 0.0002, Adjusted R² = -0.0018
-Total     : -11.300567711939745⋅v + 345584.26542520936, R² = 0.0004, Adjusted R² = -0.0016
-$ ./regression.py data/async_tree-vs-values-5000.txt -p v,1
-Scheduling:   3.450078413374252⋅v + -307342.51929036854, R² = 0.0002, Adjusted R² = -0.0019
-Execution : -0.23145246290276794⋅v + 1934989.0708021887, R² = 0.0000, Adjusted R² = -0.0020
-Total     :    3.218625950471484⋅v + 1627646.5515118204, R² = 0.0000, Adjusted R² = -0.0020
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_tree > data/async_reset_tree-5K.txt  
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_tree > data/async_reset_tree-5K-2.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_tree > data/async_reset_tree-5K-3.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_tree > data/async_reset_tree-5K-4.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_tree > data/async_reset_tree-5K-5.txt
+
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K.txt -y S -p 1                       
+Scheduling: 1779, R² = -0.0000, Adjusted R² = -0.0002
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-2.txt -y S -p 1
+Scheduling: 1654, R² = 0.0000, Adjusted R² = -0.0002
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-3.txt -y S -p 1
+Scheduling: 1521, R² = 0.0000, Adjusted R² = -0.0002
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-4.txt -y S -p 1
+Scheduling: 1475, R² = 0.0000, Adjusted R² = -0.0002
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-5.txt -y S -p 1
+Scheduling: 1494, R² = 0.0000, Adjusted R² = -0.0002
+
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K.txt --diff data/nonisolated_array-5K.txt -y T -p o   
+Total: 320⋅o, R² = 0.9904, Adjusted R² = 0.9904
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-2.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 320⋅o, R² = 0.9931, Adjusted R² = 0.9931
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-3.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 315⋅o, R² = 0.9963, Adjusted R² = 0.9963
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-4.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 315⋅o, R² = 0.9968, Adjusted R² = 0.9968
+$ ./regression.py data/inputs-5K.txt data/async_reset_tree-5K-5.txt --diff data/nonisolated_array-5K.txt -y T -p o
+Total: 315⋅o, R² = 0.9961, Adjusted R² = 0.9961
 ```
 
-Note that scheduling deallocation of the root of a tree is faster then deallocating entire tree, because only 1 objects needs to be scheduled. This shows that async deinit can be used to unblock thread of last release faster at the cost of slower deallocation in another task.
+As expected, scheduling the root of tree of objects with async deinit has a high constant cost, because scheduling first object happens on the idle actor. But surprisingly numbers are lower than for isolated trees.
 
-Now we can analyze performance of async deinit depending only on number of objects:
+Per object cost captured by the `Total` time, includes scheduling and execution, so expected value should be around 270ns + 315ns = 585ns,
+but observed values are much slower - around 315-320ns. Note that in this benchmark all work is executed on a single actor. There is no concurrency that could explain decreased cost.
 
-```shell
-$ ./run-benchmark.sh async_tree --values=1:1 --objects=100:50000 --points=1000 > data/async_tree-vs-objects.txt 
-$ ./run-benchmark.sh async_array --values=1:1 --objects=100:50000 --points=1000 > data/async_array-vs-objects.txt
-```
+### 6. Async deinit - copy
 
-![async deinit vs number of objects](img/async-vs-objects.png)
+#### 6.1. Array
 
-```shell
-$ ./regression.py data/async_tree-vs-objects.txt -p o,1
-Scheduling: -62.03628799124445⋅o + 1319.8175314705481, R² = 0.9964, Adjusted R² = 0.9964
-Execution :  502.1604231178307⋅o + -684561.5415930031, R² = 0.9848, Adjusted R² = 0.9848
-Total     : 440.12413512658634⋅o + -683241.7240615345, R² = 0.9805, Adjusted R² = 0.9804
-$ ./regression.py data/async_array-vs-objects.txt -p o,1
-Scheduling:   341.9412867451418⋅o + -75775.4954550333, R² = 0.8212, Adjusted R² = 0.8209
-Execution :  85.31886018727057⋅o + -94431.03322500603, R² = 0.9329, Adjusted R² = 0.9328
-Total     : 427.26014693241245⋅o + -170206.5286800412, R² = 0.8768, Adjusted R² = 0.8766
-```
-
-This shows that total cost of async deinit is linear in number of objects, costing about 400ns extra per object. The `async_array` benchmark shows that most of the time is spent in scheduling task for async deinit. The `async_tree` is not indicative, because measured scheduling time includes only scheduling destruction of the root object. Scheduling destruction of the child nodes is included in the "Execution".
-
-### Copying task-local values in async deinit
-
-#### Array
-
-```shell
-$ ./run-benchmark.sh async_copy_array --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_array.txt 
-```
-
-![cost of copying task-locals in async deinit of array of objects](img/async_copy_array.png)
-
-```shell
-$ ./regression.py data/async_copy_array.txt -p vo,o  
-Scheduling:   24.984413687185803⋅v⋅o + 169.55852433924048⋅o, R² = 0.9952, Adjusted R² = 0.9952
-Execution : 0.003699444311821941⋅v⋅o + -80.34199529218753⋅o, R² = 0.9667, Adjusted R² = 0.9666
-Total     :    24.988113131497613⋅v⋅o + 89.21652904705317⋅o, R² = 0.9951, Adjusted R² = 0.9951
-./regression.py data/async_copy_array.txt -y S,T -p vo                                                                                
-Scheduling: 26.264204261611525⋅v⋅o, R² = 0.9933, Adjusted R² = 0.9933
-Total     : 25.661499936450927⋅v⋅o, R² = 0.9946, Adjusted R² = 0.9946
-```
-
-When scheduling async deinit, it costs about 25ns to copy a task-local value. Data is too noisy to determine if there is a per-object cost independent of number of task-local values.
-
-Surprisingly there seems to be linear dependency between execution time and number of objects. Each extra object **decreases** execution time by 80ns. That's a very surprising effect, for which I don't have an explanation yet.
-
-#### Tree
-
-```shell
-$ ./run-benchmark.sh async_copy_tree --values=1:200 --objects=100:50000 --points=1000 > data/async_copy_tree.txt 
-```
-
-Difference in scheduling is too noisy to draw any conclusions about effect of copying task-locals on scheduling of the destruction of the root of the tree:
-
-```shell
-$ ./regression.py data/async_copy_tree.txt -y S        
-Scheduling: -1.7290801314669238e-08⋅v⋅o² + 0.001235787251508909⋅v⋅o + -7.618884224050876⋅v + 5.302224585147051e-06⋅o² + -0.3656720714361409⋅o + 5570.464743812955, R² = 0.1265, Adjusted R² = 0.1212
-```
-
-But differences in total execution time allow to conclude that copying task-locals in async deinit costs about 40ns per value per object:
-
-```shell
-$ ./regression.py data/async_copy_tree.txt -y T -p vo
-Total: 39.14231151032403⋅v⋅o, R² = 0.9981, Adjusted R² = 0.9981
-```
-
-It is not clear what causes 15ns difference between array and tree cases.
+#### 5.2. Tree
