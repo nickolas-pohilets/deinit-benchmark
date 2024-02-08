@@ -438,10 +438,39 @@ Total: 315⋅o, R² = 0.9961, Adjusted R² = 0.9961
 As expected, scheduling the root of tree of objects with async deinit has a high constant cost, because scheduling first object happens on the idle actor. But surprisingly numbers are lower than for isolated trees.
 
 Per object cost captured by the `Total` time, includes scheduling and execution, so expected value should be around 270ns + 315ns = 585ns,
-but observed values are much slower - around 315-320ns. Note that in this benchmark all work is executed on a single actor. There is no concurrency that could explain decreased cost.
+but observed values are much smaller - around 315-320ns. Note that in this benchmark all work is executed on a single actor. There is no concurrency that could explain decreased cost.
 
 ### 6. Async deinit - copy
 
 #### 6.1. Array
 
-#### 5.2. Tree
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt async_copy_array --ballast=100 > data/async_copy_array-b100-5K.txt
+$ ./run-benchmark.sh data/inputs-5K.txt async_reset_array --ballast=100 > data/async_reset_array-b100-5K.txt
+$ ./regression.py data/inputs-5K.txt data/async_copy_array-b100-5K.txt --min-values=180 -p o
+Scheduling: 5431⋅o, R² = 0.9455, Adjusted R² = 0.9454
+Total     : 7881⋅o, R² = 0.9699, Adjusted R² = 0.9699
+$ ./regression.py data/inputs-5K.txt data/async_copy_array-b100-5K.txt --diff data/async_reset_array-b100-5K.txt -p vo 
+Scheduling: 27⋅v⋅o, R² = 0.9659, Adjusted R² = 0.9659
+Total     : 20⋅v⋅o, R² = 0.9270, Adjusted R² = 0.9270
+```
+
+Ballast is sufficient to measure execution costs, and we can see that each task-local values incurs additional cost of 27ns during scheduling and 20ns during execution.
+
+Between isolated and async deinit there is a slight difference in how memory for task-local values is allocated, which can explain 7ns difference between isolated slow path and async cases.
+
+#### 6.2. Tree
+
+```shell
+$ ./run-benchmark.sh data/inputs-5K.txt async_copy_tree > data/async_copy_tree-5K.txt   
+$ ./regression.py data/inputs-5K.txt data/async_copy_tree-5K.txt --diff data/async_reset_tree-5K.txt -y S -p v,1
+Scheduling: 25⋅v + 2476, R² = 0.1018, Adjusted R² = 0.1014
+$ ./regression.py data/inputs-5K.txt data/async_copy_tree-5K.txt --diff data/async_reset_tree-5K.txt -y T -p vo 
+Total: 36⋅v⋅o, R² = 0.9943, Adjusted R² = 0.9943
+```
+
+Scheduling costs look as expected - there is a large constant cost for adding first job to the idle actor, and cost per task-local value
+when scheduling root node.
+
+Per object cost captured by the `Total` time, includes scheduling and execution, so expected value should be around 27ns + 20ns = 47ns,
+but observed values are smaller - around 36ns. Note that in this benchmark all work is executed on a single actor. There is no concurrency that could explain decreased cost.
