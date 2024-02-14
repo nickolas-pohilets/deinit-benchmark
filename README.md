@@ -2,7 +2,9 @@
 
 ## Summary
 
-Benchmark measures performance of the isolated and async deinit, after applying two optimizations:
+Benchmarks were performed on MacBook Pro with M1 Max CPU using release build of the standard library.
+
+Benchmarks measure performance of the isolated and async deinit, after applying two optimizations:
 
 * After replacing `std::set<>` with `llvm::DenseSet<>` in `TaskLocal::copyTo()`, the cost of copying task-local values is linear in number of values and costs about 35ns per value. Before that it was `O(n*log(n))` with numbers of about 50ns/value for 10 values, and 80ns/item for 1000 values.
 
